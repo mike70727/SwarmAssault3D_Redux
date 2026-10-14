@@ -187,5 +187,9 @@ and what is assumed. Procedural Mode is the one deliberate addition.
 * Made by [mike70727](https://github.com/mike70727), with Claude (Anthropic) writing the code,
   models and animation.
 
-The code and the new models and art are under the MIT license ([LICENSE](LICENSE)). The
-original game's files are not included and not covered by it.
+Swarm Assault 3D Redux is free software, under the same license as OpenSA: you can
+redistribute it and/or modify it under the terms of the GNU General Public License as published
+by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version ([LICENSE](LICENSE)). Whoever passes it on, changed or not, must pass on its source code
+under the same license. It is a free fan project and is not for sale. It comes with no warranty.
+The original game's files are not included and are not covered by this license.
