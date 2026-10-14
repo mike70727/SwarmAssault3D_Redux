@@ -11,6 +11,10 @@ python3 -m venv .venv-bpy
 .venv-bpy/bin/python blender/scripts/build_colony.py colony_ant
 ```
 
+The colonies in the game come from Tripo models instead (`colony_tripo.py`, notes in
+`docs/ASSET_NOTES.md`): `blender -b --factory-startup --python blender/scripts/colony_tripo.py --
+colony_spider --src <tripo model.obj>` (`--fit-only` for the sprite fit alone).
+
 Each build writes:
 
 | Output | Path |

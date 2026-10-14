@@ -172,7 +172,8 @@ pub fn base_material_name(name: &str) -> &str {
 }
 
 /// Tinted copy of a loaded glTF material: keeps its baked colour/roughness/normal textures and
-/// only replaces the colour factor (the textures of `M_Team`/`M_Colony` are baked untinted).
+/// only replaces the colour factor (the textures of `M_Team`/`M_Colony`/`M_ColonyPale` are baked
+/// untinted).
 fn tinted_material(
     original: &Handle<StandardMaterial>,
     tint: Color,
@@ -221,6 +222,7 @@ fn on_scene_ready(
             let (tint_color, key) = match base_material_name(&name.0) {
                 "M_Team" => (Some(assets.team_color(t.team)), t.team as u32),
                 "M_Colony" => (Some(assets.colony_color(t.team)), 100 + t.team as u32),
+                "M_ColonyPale" => (Some(assets.colony_pale_color(t.team)), 200 + t.team as u32),
                 _ => (None, 0),
             };
             if let Some(color) = tint_color {
@@ -422,6 +424,7 @@ fn sync_colonies(
                 let (color, key) = match base_material_name(&name.0) {
                     "M_Team" => (Some(assets.team_color(team_for_material)), team_for_material as u32),
                     "M_Colony" => (Some(assets.colony_color(team_for_material)), 100 + team_for_material as u32),
+                    "M_ColonyPale" => (Some(assets.colony_pale_color(team_for_material)), 200 + team_for_material as u32),
                     _ => (None, 0),
                 };
                 if let Some(color) = color {

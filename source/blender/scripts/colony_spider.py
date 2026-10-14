@@ -88,7 +88,7 @@ SPIDER_BELL_ROT = 45.0
 SPIDER_LEG_ANGLES = (90, 72, 55, 38, 21, 4, -15, -95, -118, -140, -162, 178, 108)
 SPIDER_TOWERS = (((-0.86, 0.68), 2.75), ((0.95, -1.06), 2.75))  # top-face centres fitted to the sprite
 SPIDER_KNEE_Z = 2.56  # knees (with their knobs) stay under the sweeping sniper barrels (bottom 2.99)
-SPIDER_GUN_Z = 0.32  # barrel axis above the tower top -> colonies.ron height 3.07
+SPIDER_GUN_Z = 0.13  # barrel axis above the tower top (colonies.ron height = tower top + 0.13)
 
 
 def bell_r(a_deg):
@@ -165,29 +165,24 @@ def spider_materials():
 
 
 def spider_turret(name, mats, pivot):
-    """Octagonal team-coloured drum (turret sprite: ~1.25 cells across, flat sides facing the axes)
-    with a bevelled top and a closed hatch lid; a mantlet in front carries a long sniper barrel with a
-    shroud, a muzzle brake and a scope.  Barrel tip 1.36 from the yaw axis."""
+    """The tower's own head, as the original shows it (turret sprite and gameplay video, Mike
+    2026-10-14: "not really cannons ... just two barrels inside the tower"): a team-coloured octagonal
+    cap a little wider than the tower, sunk onto its top, with a bevelled rim and a dark three-cornered
+    opening on top, and one thin sniper barrel poking out of its side.  Barrel tip 0.86 from the yaw
+    axis, barrel axis SPIDER_GUN_Z above the tower top."""
     p = Vector(pivot)
     g = SPIDER_GUN_Z
     r8 = (0, 0, math.radians(22.5))
-    fixed = [_cyl(mats, p + Vector((0, 0, 0.045)), 0.5, 0.09, "M_Colony.dark", verts=8, rot=r8),
-             _cyl(mats, p + Vector((0, 0, 0.26)), 0.6, 0.34, "M_Colony", verts=8, rot=r8),
-             _cone(mats, p + Vector((0, 0, 0.49)), 0.6, 0.42, 0.12, "M_Colony", rot=r8, verts=8, smooth=False),
-             _cyl(mats, p + Vector((0, 0.16, 0.56)), 0.17, 0.035, "M_Colony.dark", verts=16),
-             _cyl(mats, p + Vector((0, 0.16, 0.585)), 0.15, 0.03, "M_Colony", verts=16),
-             _box(mats, p + Vector((0, 0.16, 0.61)), (0.18, 0.04, 0.03), "M_GunA")]
-    for k in range(8):  # bolts on the drum's upper edge
-        a = math.radians(22.5 + 45 * k)
-        fixed.append(_sphere(mats, p + Vector((0.52 * math.cos(a), 0.52 * math.sin(a), 0.43)), 0.03, "M_GunA",
-                             segments=6, rings=4))
+    fixed = [_cyl(mats, p + Vector((0, 0, 0.0)), 0.47, 0.06, "M_Colony.dark", verts=8, rot=r8),
+             _cyl(mats, p + Vector((0, 0, 0.13)), 0.5, 0.22, "M_Colony", verts=8, rot=r8),
+             _cone(mats, p + Vector((0, 0, 0.275)), 0.5, 0.41, 0.07, "M_Colony", rot=r8, verts=8, smooth=False),
+             # the opening: a three-cornered hole pointing back, away from the barrel
+             ensure_uv(convex_part(mats, [p + Vector((x, y, z)) for z in (0.304, 0.318)
+                                          for x, y in ((0.0, 0.22), (-0.15, -0.06), (0.15, -0.06))], "M_Black",
+                                   name="Hatch"))]
     rx = math.radians(90)
-    moving = [_box(mats, p + Vector((0, -0.61, g)), (0.32, 0.18, 0.26), "M_GunA", bevel=0.04),
-              _cyl(mats, p + Vector((0, -1.0, g)), 0.055, 0.74, "M_GunA", verts=12, rot=(rx, 0, 0)),
-              _cyl(mats, p + Vector((0, -0.8, g)), 0.082, 0.32, "M_GunA", verts=12, rot=(rx, 0, 0)),
-              _cyl(mats, p + Vector((0, -1.31, g)), 0.08, 0.12, "M_GunA", verts=12, rot=(rx, 0, 0)),
-              _cyl(mats, p + Vector((0, -0.62, g + 0.2)), 0.05, 0.38, "M_GunA", verts=10, rot=(rx, 0, 0)),
-              _box(mats, p + Vector((0, -0.62, g + 0.14)), (0.07, 0.12, 0.08), "M_GunA")]
+    moving = [_cyl(mats, p + Vector((0, -0.58, g)), 0.032, 0.56, "M_GunA", verts=10, rot=(rx, 0, 0)),
+              _cyl(mats, p + Vector((0, -0.84, g)), 0.045, 0.04, "M_GunA", verts=10, rot=(rx, 0, 0))]
     return _make_turret(name, mats, pivot, fixed, moving)
 
 

@@ -62,6 +62,17 @@ impl GameAssets {
         self.team_colony_colors.get(&team).copied().unwrap_or(Color::srgb(0.78, 0.72, 0.66))
     }
 
+    /// The muted colony colour of the towers (`M_ColonyPale`): the team colour a fifth of the way to
+    /// its own grey and a quarter darker, as the original's towers are a duller shade of the team
+    /// colour (dark red for red, beige for yellow).  Mirrors `pale_lin()` in
+    /// source/blender/scripts/colony_tripo.py (both in linear light).
+    pub fn colony_pale_color(&self, team: u8) -> Color {
+        let c = self.colony_color(team).to_linear();
+        let l = 0.2126 * c.red + 0.7152 * c.green + 0.0722 * c.blue;
+        let pale = |v: f32| (v * 0.8 + l * 0.2) * 0.75;
+        Color::linear_rgb(pale(c.red), pale(c.green), pale(c.blue))
+    }
+
     pub fn team_material(&self, team: u8) -> Handle<StandardMaterial> {
         self.team_materials.get(&team).cloned().unwrap_or_else(|| self.neutral_material.clone())
     }

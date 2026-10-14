@@ -134,7 +134,30 @@ which the data files reproduce (`flying: true, air: false`).
 | neutral_spawn_moth | furry tan body, two large patterned wings per side with dark eye-spots, feathery antennae | wing pattern simplified to spots |
 | neutral_flying_machine | dark wooden hull, mast with a four-blade pink rotor, pirate-ant pilot, tail fin | hull shape (sprite is a dark blob under the pink rotor) |
 
-## Colonies (`build_colony.py`)
+## Colonies (`colony_tripo.py`, the models in the game since 2026-10-14)
+
+Mike generated each colony with Tripo (image to 3-D) from the original's in-game body sprite; the
+raw downloads (OBJ, about 2 million triangles, base colour / roughness / metallic / normal maps)
+are kept outside the repository. `colony_tripo.py` turns one into the game model:
+
+1. **Level** the base: Tripo does not know where the floor is (the beetle stood 12 degrees off, the
+   ant 11, the scorpion 16): the tilt that lays the most of the model flat on its lowest level.
+2. **Fit** it to the sprite camera (60 degrees from the south, 24 px per cell): rotation, scale and
+   ground offset from the silhouette, then a north-south and a vertical scale from where the team
+   colour and the towers show (one oblique picture leaves depth open), kept centred on the 6x6
+   footprint. The chosen numbers are stored in the script (outline overlap 0.87-0.97).
+3. **Bake** the colour, roughness, metal and normals of the source onto a 34,000-triangle copy;
+   split its faces into team colour (`M_Colony`), muted towers (`M_ColonyPale`, a darker, slightly
+   greyer team colour the game computes) and the untinted rest; team texels are stored as grey.
+4. **Turrets** from each family's builder, placed where the sprite camera's ray through the
+   original's turret Mount Point (Game.ANI) meets the model: a flat tower top, a dome's crown or
+   the scorpion's honeycomb plateau. The spider's turret is the tower's own octagonal cap with a
+   dark opening and one thin sniper barrel (original turret sprite and gameplay video).
+
+`colonies.ron` turret offsets and heights are the values the build prints. Units leave each
+colony through its south-east doorway, as the original's Colony Exit Points do.
+
+## Colonies (`build_colony.py`, procedural, before the Tripo models)
 
 Second iteration (the first versions were loose interpretations): every colony now follows the
 layout of its 144-px original sprite (`Quick_References/Buildings/<Family>_Colony_Y/Colony_Body.png`,

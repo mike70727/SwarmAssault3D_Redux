@@ -2,6 +2,9 @@
 //   HP 100000, ChangesHealth Step 100 per 40 ms tick -> 2500 HP/s while not producing,
 //   footprint Dimensions 6,6 -> half_extent 3.0, turret ranges in cells, reloads in seconds.
 // Turret offsets follow the tower positions of the rebuilt colony models (from the original sprites), NOT OpenSA.
+// Turret offsets/heights are where colony_tripo.py puts the turrets on the Tripo models (it prints them).
+// Units leave through the doorway in the south-east, as the original's Colony Exit Points all do
+// (Game.ANI, e.g. spider +1.67,+1.67): the free corner cell of the footprint, then on to the rally point.
 (
     colonies: {
         "colony_ant": (
@@ -12,13 +15,13 @@
             half_extent: 3.0,
             corner_cut: 1,
             turrets: [
-                (offset: (0.5, -1.33), weapon: "colony_ant_mg", turn_rate: 720.0, node: "Turret_1", height: 3.1, muzzle: 1.27),
-                (offset: (-0.12, 1.29), weapon: "colony_ant_mg", turn_rate: 720.0, node: "Turret_2", height: 3.1, muzzle: 1.27),
+                (offset: (0.50, -1.00), weapon: "colony_ant_mg", turn_rate: 720.0, node: "Turret_1", height: 3.33, muzzle: 1.27),
+                (offset: (-0.09, 1.81), weapon: "colony_ant_mg", turn_rate: 720.0, node: "Turret_2", height: 3.60, muzzle: 1.27),
             ],
             produces: ["ant_soldier", "ant_grenadier", "ant_bazooka"],
             build_time_multiplier: 0.75,   // OpenSA ant faction specialisation: -25% breeding time
-            exit_offset: (0.0, 3.8),
-            rally_offset: (0.0, 6.5),
+            exit_offset: (2.5, 2.5),
+            rally_offset: (4.6, 4.6),
             model: "colony_ant",
             bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa ants_colony: HP 100000, 2 turrets ants_colony weapon, ChangesHealth 100/tick; bits: DefeatedColony 75 ticks delay, 9 bits, range 5-10, lifetime 500-750 ticks, ResurrectHealth 25%; ORIGINAL VALUES: original FUN_004127a0: health 2500, +10 every 500 ms while not breeding",
@@ -31,12 +34,12 @@
             half_extent: 3.0,
             corner_cut: 1,
             turrets: [
-                (offset: (0.0, 0.0), weapon: "colony_beetle_cannon", turn_rate: 540.0, node: "Turret_1", height: 2.25, muzzle: 1.18),
+                (offset: (-0.16, 0.07), weapon: "colony_beetle_cannon", turn_rate: 540.0, node: "Turret_1", height: 3.10, muzzle: 1.18),
             ],
             produces: ["beetle_ladybug", "beetle_shrapnel", "beetle_cannon"],
             build_time_multiplier: 1.0,
-            exit_offset: (0.0, 3.8),
-            rally_offset: (0.0, 6.5),
+            exit_offset: (2.5, 2.5),
+            rally_offset: (4.6, 4.6),
             model: "colony_beetle",
             bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa beetles_colony: HP 100000, 1 cannon turret (range 12, reload 30 ticks, 1950 dmg, spread 300); ORIGINAL VALUES: original FUN_00413610: health 3500, +12 every 500 ms while not breeding",
@@ -49,13 +52,13 @@
             half_extent: 3.0,
             corner_cut: 1,
             turrets: [
-                (offset: (-0.86, -0.68), weapon: "colony_spider_sniper", turn_rate: 720.0, node: "Turret_1", height: 3.07, muzzle: 1.37),
-                (offset: (0.95, 1.06), weapon: "colony_spider_sniper", turn_rate: 720.0, node: "Turret_2", height: 3.07, muzzle: 1.37),
+                (offset: (-0.90, -0.31), weapon: "colony_spider_sniper", turn_rate: 720.0, node: "Turret_1", height: 3.11, muzzle: 0.86),
+                (offset: (0.85, 1.29), weapon: "colony_spider_sniper", turn_rate: 720.0, node: "Turret_2", height: 2.93, muzzle: 0.86),
             ],
             produces: ["spider_black_widow", "spider_sniper", "spider_missile"],
             build_time_multiplier: 1.0,
-            exit_offset: (0.0, 3.8),
-            rally_offset: (0.0, 6.5),
+            exit_offset: (2.5, 2.5),
+            rally_offset: (4.6, 4.6),
             model: "colony_spider",
             bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa spiders_colony: HP 100000, 2 sniper turrets (range 13, reload 25 ticks, 1450 dmg); ORIGINAL VALUES: original FUN_00417160: health 4000, +14 every 500 ms while not breeding",
@@ -68,12 +71,12 @@
             half_extent: 3.0,
             corner_cut: 1,
             turrets: [
-                (offset: (0.42, -1.2), weapon: "colony_scorpion_spear", turn_rate: 540.0, node: "Turret_1", height: 2.59, muzzle: 1.23),
+                (offset: (0.15, -0.46), weapon: "colony_scorpion_spear", turn_rate: 540.0, node: "Turret_1", height: 3.80, muzzle: 1.23),
             ],
             produces: ["scorpion_savage", "scorpion_spear_gun", "scorpion_ninja"],
             build_time_multiplier: 1.0,
-            exit_offset: (0.0, 3.8),
-            rally_offset: (0.0, 6.5),
+            exit_offset: (2.5, 2.5),
+            rally_offset: (4.6, 4.6),
             model: "colony_scorpion",
             bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa scorpions_colony: HP 100000, 1 twin spear turret (range 18, reload 30 ticks, 1470 dmg x2 barrels); ORIGINAL VALUES: original FUN_00416230: health 4500, +15 every 500 ms while not breeding",
@@ -86,12 +89,12 @@
             half_extent: 3.0,
             corner_cut: 1,
             turrets: [
-                (offset: (-0.9, -0.33), weapon: "colony_wasp_mg", turn_rate: 720.0, node: "Turret_1", height: 2.59, muzzle: 1.21),
+                (offset: (-0.76, 0.71), weapon: "colony_wasp_mg", turn_rate: 720.0, node: "Turret_1", height: 4.12, muzzle: 1.21),
             ],
             produces: ["wasp_assault", "wasp_paralysis", "wasp_sonic"],
             build_time_multiplier: 1.0,
-            exit_offset: (0.0, 3.8),
-            rally_offset: (0.0, 6.5),
+            exit_offset: (2.5, 2.5),
+            rally_offset: (4.6, 4.6),
             model: "colony_wasp",
             bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa wasps_colony: HP 100000, 1 machine-gun turret (range 12, reload 4 ticks, 782 dmg); ORIGINAL VALUES: original FUN_00418080: health 5000, +16 every 500 ms while not breeding",
