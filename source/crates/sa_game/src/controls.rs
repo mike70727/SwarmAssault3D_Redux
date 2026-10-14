@@ -53,6 +53,8 @@ impl Default for Controls {
         bind("quick_load", &["F9"]);
         bind("menu", &["Escape"]);
         bind("center_camera", &["Home"]);
+        bind("help", &["F1"]);
+        bind("console", &["Enter", "NumpadEnter"]);
         Self { keys, edge_pan: true, edge_pan_margin: 12.0, pan_speed: 28.0, zoom_speed: 1.0, rotate_speed: 1.6, invert_zoom: false, drag_threshold: 6.0 }
     }
 }
@@ -73,7 +75,7 @@ impl Controls {
     pub fn load() -> Self {
         let path = std::path::PathBuf::from(asset_root()).join("data/controls.ron");
         match std::fs::read_to_string(&path) {
-            Ok(text) => match ron::from_str::<Controls>(&text) {
+            Ok(text) => match ron::from_str::<Controls>(sa_sim::data::strip_bom(&text)) {
                 Ok(c) => c,
                 Err(e) => {
                     warn!("controls.ron is invalid ({e}); using defaults");
@@ -100,7 +102,7 @@ pub fn parse_key(name: &str) -> Option<KeyCode> {
         "Digit0" => Digit0, "Digit1" => Digit1, "Digit2" => Digit2, "Digit3" => Digit3, "Digit4" => Digit4,
         "Digit5" => Digit5, "Digit6" => Digit6, "Digit7" => Digit7, "Digit8" => Digit8, "Digit9" => Digit9,
         "ArrowUp" => ArrowUp, "ArrowDown" => ArrowDown, "ArrowLeft" => ArrowLeft, "ArrowRight" => ArrowRight,
-        "Space" => Space, "Escape" => Escape, "Enter" => Enter, "Tab" => Tab, "Backspace" => Backspace,
+        "Space" => Space, "Escape" => Escape, "Enter" => Enter, "NumpadEnter" => NumpadEnter, "Tab" => Tab, "Backspace" => Backspace,
         "ShiftLeft" => ShiftLeft, "ShiftRight" => ShiftRight, "ControlLeft" => ControlLeft, "ControlRight" => ControlRight,
         "AltLeft" => AltLeft, "AltRight" => AltRight, "Home" => Home, "End" => End, "PageUp" => PageUp, "PageDown" => PageDown,
         "Equal" => Equal, "Minus" => Minus, "BracketLeft" => BracketLeft, "BracketRight" => BracketRight,

@@ -43,7 +43,7 @@ pub fn to_string(world: &World) -> Result<String, SaveError> {
 }
 
 pub fn from_str(text: &str) -> Result<World, SaveError> {
-    let s: SaveFile = ron::from_str(text).map_err(|e| SaveError::Format(e.to_string()))?;
+    let s: SaveFile = ron::from_str(crate::data::strip_bom(text)).map_err(|e| SaveError::Format(e.to_string()))?;
     if s.version != crate::version() {
         return Err(SaveError::Version { file: s.version, expected: crate::version().to_string() });
     }

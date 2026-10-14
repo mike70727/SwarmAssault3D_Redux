@@ -39,7 +39,9 @@ impl Plugin for SimPlugin {
             .init_resource::<PendingOrders>()
             .add_systems(OnEnter(AppState::Loading), load_sim)
             .add_systems(FixedUpdate, step_sim.run_if(in_state(AppState::InGame)))
-            .add_systems(Update, (update_alpha, pause_keys).run_if(in_state(AppState::InGame)))
+            .add_systems(Update, update_alpha.run_if(in_state(AppState::InGame)))
+            // typing in the console (a space, brackets) must not pause the game or change its speed
+            .add_systems(Update, pause_keys.run_if(in_state(AppState::InGame)).run_if(|c: Res<crate::console::ConsoleState>| !c.open))
             // every consumer (views, audio, HUD) reads `GameSim::events` during Update; drop them
             // afterwards so an event is handled exactly once
             .add_systems(Last, clear_sim_events.run_if(in_state(AppState::InGame)));
@@ -64,7 +66,10 @@ pub fn load_sim(mut commands: Commands, cli: Res<CliOptions>) {
                 std::process::exit(2);
             }
         };
-        let mut map = match MapDef::load(&assets_dir.join("data/maps").join(&cli.map)) {
+        // a map name from the level list, or any path to a map file (test and showcase maps)
+        let direct = PathBuf::from(&cli.map);
+        let map_path = if direct.is_absolute() || direct.components().count() > 1 { direct } else { assets_dir.join("data/maps").join(&cli.map) };
+        let mut map = match MapDef::load(&map_path) {
             Ok(m) => m,
             Err(e) => {
                 error!("could not load map {}: {e}", cli.map);
@@ -95,7 +100,7 @@ pub fn load_sim(mut commands: Commands, cli: Res<CliOptions>) {
         }
     };
     info!("map '{}' loaded: {} units, {} colonies", world.map.name, world.living_units().count(), world.colonies.len());
-    commands.insert_resource(GameSim { world, paused: false, speed: cli.speed.max(0.05), alpha: 1.0, events: Vec::new(), step_ms: 0.0, assets_dir });
+    commands.insert_resource(GameSim { world, paused: cli.paused, speed: cli.speed.max(0.05), alpha: 1.0, events: Vec::new(), step_ms: 0.0, assets_dir });
 }
 
 fn step_sim(mut sim: ResMut<GameSim>, mut pending: ResMut<PendingOrders>, mut fixed: ResMut<Time<Fixed>>, settings: Res<crate::settings::Settings>) {

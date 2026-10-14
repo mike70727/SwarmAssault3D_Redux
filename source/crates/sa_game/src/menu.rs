@@ -252,7 +252,7 @@ fn on_activate(
             next.set(AppState::Loading);
         }
         MenuAction::LoadQuicksave => {
-            cli.load = Some("saves/quicksave.ron".into());
+            cli.load = Some(crate::user_path("saves/quicksave.ron").to_string_lossy().to_string());
             next.set(AppState::Loading);
         }
         MenuAction::Quit => {
@@ -263,7 +263,7 @@ fn on_activate(
         }
         MenuAction::SaveGame => {
             if let Some(sim) = sim.as_ref() {
-                match sa_sim::save::save(&sim.world, std::path::Path::new("saves/quicksave.ron")) {
+                match sa_sim::save::save(&sim.world, &crate::user_path("saves/quicksave.ron")) {
                     Ok(()) => info!("saved saves/quicksave.ron"),
                     Err(e) => error!("save failed: {e}"),
                 }
@@ -271,7 +271,7 @@ fn on_activate(
         }
         MenuAction::LoadGame => {
             if let Some(mut sim) = sim {
-                match sa_sim::save::load(std::path::Path::new("saves/quicksave.ron")) {
+                match sa_sim::save::load(&crate::user_path("saves/quicksave.ron")) {
                     Ok(w) => {
                         sim.world = w;
                         sim.events.clear();

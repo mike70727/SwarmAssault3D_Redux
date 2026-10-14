@@ -4,7 +4,9 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-const PATH: &str = "saves/progress.ron";
+fn path() -> std::path::PathBuf {
+    crate::user_path("saves/progress.ron")
+}
 
 #[derive(Resource, Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
@@ -19,9 +21,10 @@ pub struct Progress {
 
 impl Progress {
     pub fn load() -> Self {
-        match std::fs::read_to_string(PATH) {
-            Ok(text) => ron::from_str(&text).unwrap_or_else(|e| {
-                warn!("{PATH}: {e}; starting a fresh progress file");
+        let p = path();
+        match std::fs::read_to_string(&p) {
+            Ok(text) => ron::from_str(sa_sim::data::strip_bom(&text)).unwrap_or_else(|e| {
+                warn!("{}: {e}; starting a fresh progress file", p.display());
                 Self::default()
             }),
             Err(_) => Self::default(),
@@ -29,11 +32,14 @@ impl Progress {
     }
 
     pub fn save(&self) {
-        std::fs::create_dir_all("saves").ok();
+        let p = path();
+        if let Some(dir) = p.parent() {
+            std::fs::create_dir_all(dir).ok();
+        }
         match ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new()) {
             Ok(text) => {
-                if let Err(e) = std::fs::write(PATH, text) {
-                    error!("could not write {PATH}: {e}");
+                if let Err(e) = std::fs::write(&p, text) {
+                    error!("could not write {}: {e}", p.display());
                 }
             }
             Err(e) => error!("progress: {e}"),

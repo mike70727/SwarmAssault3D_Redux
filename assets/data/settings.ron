@@ -3,7 +3,7 @@
     width: 1280,
     height: 720,
     fullscreen: false,
-    vsync: false,
+    vsync: true,
     msaa: 4,            // 1, 2, 4 or 8 samples
     shadows: true,
     shadow_cascades: 3,

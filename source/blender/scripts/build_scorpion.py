@@ -177,7 +177,7 @@ def build(variant: str):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("-")] or list(VARIANTS)
+    args = [a for a in salib.script_args() if not a.startswith("-")] or list(VARIANTS)
     for v in args:
         build(v)
         print("BUILT", v, flush=True)

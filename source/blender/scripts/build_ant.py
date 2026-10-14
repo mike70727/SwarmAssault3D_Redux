@@ -176,8 +176,8 @@ def build(variant: str):
 
 
 if __name__ == "__main__":
-    flags = [a for a in sys.argv[1:] if a.startswith("-")]
-    args = [a for a in sys.argv[1:] if not a.startswith("-")] or (list(VARIANTS) if "--all" in flags else ["ant_soldier"])
+    flags = [a for a in salib.script_args() if a.startswith("-")]
+    args = [a for a in salib.script_args() if not a.startswith("-")] or (list(VARIANTS) if "--all" in flags else ["ant_soldier"])
     for v in args:
         if v not in VARIANTS:
             raise SystemExit(f"unknown variant {v}; choose from {list(VARIANTS)}")

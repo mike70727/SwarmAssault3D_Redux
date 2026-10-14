@@ -26,9 +26,6 @@ from mathutils import Euler, Matrix, Quaternion, Vector
 # Realism pass (procedural chitin shaders, subdivided/displaced geometry, baked textures).
 # Set SA_REALISM=0 in the environment to get the original flat-shaded primitives.
 REALISM = os.environ.get("SA_REALISM", "1") != "0"
-TEXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "textures")
-TEXTURE_DIR = os.path.abspath(TEXTURE_DIR)
-os.makedirs(TEXTURE_DIR, exist_ok=True)
 
 # --------------------------------------------------------------------------------------------
 # paths
@@ -37,9 +34,25 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 BLEND_DIR = os.path.join(PROJECT_ROOT, "blender", "blend")
 PREVIEW_DIR = os.path.join(PROJECT_ROOT, "blender", "previews")
-MODEL_DIR = os.path.join(PROJECT_ROOT, "assets", "models")
 
-for d in (BLEND_DIR, PREVIEW_DIR, MODEL_DIR):
+
+def _asset_root() -> str:
+    """The game's `assets` folder: SA_ASSETS, else next to `blender/` (repository layout), else one
+    level up (release package layout: `assets/` beside `source/blender/`)."""
+    env = os.environ.get("SA_ASSETS")
+    if env:
+        return os.path.abspath(env)
+    for cand in (os.path.join(PROJECT_ROOT, "assets"), os.path.join(PROJECT_ROOT, "..", "assets")):
+        if os.path.exists(os.path.join(cand, "data", "units.ron")):
+            return os.path.abspath(cand)
+    return os.path.join(PROJECT_ROOT, "assets")
+
+
+ASSET_ROOT = _asset_root()
+MODEL_DIR = os.path.join(ASSET_ROOT, "models")
+TEXTURE_DIR = os.path.join(ASSET_ROOT, "textures")
+
+for d in (BLEND_DIR, PREVIEW_DIR, MODEL_DIR, TEXTURE_DIR):
     os.makedirs(d, exist_ok=True)
 
 FPS = 30
@@ -54,8 +67,41 @@ TEAM_COLORS = {
 }
 
 
+def script_args() -> list[str]:
+    """Command-line arguments of the asset script: the ones after `--` when the script runs inside
+    the Blender program (`blender -b --python build_ant.py -- ant_soldier`), else everything after
+    the script name (headless `bpy` module: `python build_ant.py ant_soldier`)."""
+    return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+
+
 def log(*a):
     print("[salib]", *a, flush=True)
+
+
+# Cycles renders and bakes on the CPU unless SA_CYCLES_DEVICE names a GPU backend (OPTIX, CUDA,
+# HIP, ONEAPI, METAL); the bakes are much faster on a GPU and give the same textures.
+CYCLES_DEVICE = os.environ.get("SA_CYCLES_DEVICE", "CPU").upper()
+
+
+def use_cycles_device(sc):
+    """Point Cycles at the device chosen by SA_CYCLES_DEVICE (falls back to the CPU)."""
+    sc.cycles.device = "CPU"
+    if CYCLES_DEVICE == "CPU":
+        return
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        prefs.compute_device_type = CYCLES_DEVICE
+        prefs.get_devices()
+        used = 0
+        for dev in prefs.devices:
+            dev.use = dev.type == CYCLES_DEVICE
+            used += int(dev.use)
+        if used:
+            sc.cycles.device = "GPU"
+        else:
+            log(f"no {CYCLES_DEVICE} device found: Cycles stays on the CPU")
+    except Exception as e:  # noqa: BLE001
+        log(f"{CYCLES_DEVICE} unavailable ({e}): Cycles stays on the CPU")
 
 
 # --------------------------------------------------------------------------------------------
@@ -637,7 +683,7 @@ def render_previews(asset: str, radius: float, center=(0, 0, 0.25), size=512, sa
             bg.inputs[1].default_value = 0.45
     if engine == "CYCLES":
         sc.cycles.samples = samples
-        sc.cycles.device = "CPU"
+        use_cycles_device(sc)
         sc.cycles.use_denoising = False
     sc.render.resolution_x = size
     sc.render.resolution_y = size
@@ -1118,7 +1164,7 @@ def bake_object_textures(obj, asset, size=1024, samples=32, color_quality=88, or
 
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
-    sc.cycles.device = "CPU"
+    use_cycles_device(sc)
     sc.cycles.use_denoising = False
     sc.render.bake.margin = 8
     sc.render.bake.use_clear = True

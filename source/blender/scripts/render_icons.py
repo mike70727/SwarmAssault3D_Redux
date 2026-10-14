@@ -10,7 +10,7 @@ import salib  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
 UNITS = ["ant_soldier", "beetle_ladybug", "spider_black_widow", "scorpion_savage", "wasp_assault"]
-OUT = os.path.join(salib.PROJECT_ROOT, "assets", "ui")
+OUT = os.path.join(salib.ASSET_ROOT, "ui")
 
 
 def render(unit, size=128):
@@ -61,5 +61,5 @@ def render(unit, size=128):
 
 
 if __name__ == "__main__":
-    for u in [a for a in sys.argv[1:] if not a.startswith("-")] or UNITS:
+    for u in [a for a in salib.script_args() if not a.startswith("-")] or UNITS:
         render(u)

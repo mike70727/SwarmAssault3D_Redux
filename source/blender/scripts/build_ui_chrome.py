@@ -21,7 +21,7 @@ import bpy  # noqa: E402
 import salib  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
-OUT = os.path.join(salib.PROJECT_ROOT, "assets", "ui")
+OUT = os.path.join(salib.ASSET_ROOT, "ui")
 SAMPLES = int(os.environ.get("SAMPLES", "96"))
 SCALE = int(os.environ.get("SCALE", "2"))
 W, H_TOP, H = 226, 448, 1080
@@ -703,5 +703,5 @@ def main(pieces):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    args = [a for a in salib.script_args() if not a.startswith("-")]
     main(set(args) if args else {"sidebar", "buttons", "bars", "leds", "dialog", "blackbar", "emblems"})

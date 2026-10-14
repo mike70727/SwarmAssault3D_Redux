@@ -35,6 +35,9 @@ impl RtsCamera {
 #[derive(Component)]
 pub struct MainCamera;
 
+/// Vertical field of view of the game camera.
+pub const CAMERA_FOV: f32 = 45.0 * std::f32::consts::PI / 180.0;
+
 pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
@@ -67,7 +70,7 @@ fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Setting
         MainCamera,
         DespawnOnExit(AppState::InGame),
         Camera3d::default(),
-        Projection::Perspective(PerspectiveProjection { fov: 45f32.to_radians(), near: 0.1, far: 400.0, ..default() }),
+        Projection::Perspective(PerspectiveProjection { fov: CAMERA_FOV, near: 0.1, far: 400.0, ..default() }),
         Transform::from_translation(cam.position()).looking_at(cam.focus, Vec3::Y),
         settings.msaa(),
         // ACES keeps the team colours saturated (the default TonyMcMapface washes them out)
@@ -128,13 +131,21 @@ fn camera_input(
             pan.y -= 1.0;
         }
     }
-    if buttons.pressed(MouseButton::Middle) {
-        pan += Vec2::new(-motion.delta.x, motion.delta.y) * 0.08 / dt.max(1e-3) / controls.pan_speed;
+    // screen up on the ground, and screen right (forward x up): panning right moves the view right
+    let forward = Vec3::new(-cam.yaw.sin(), 0.0, -cam.yaw.cos());
+    let right = Vec3::new(-forward.z, 0.0, forward.x);
+    if buttons.pressed(MouseButton::Middle)
+        && motion.delta != Vec2::ZERO
+        && let Ok(window) = windows.single()
+    {
+        // middle drag grabs the ground: the point under the cursor follows the cursor (screen-down
+        // motion covers more ground because of the camera pitch)
+        let units_per_px = 2.0 * cam.distance * (CAMERA_FOV * 0.5).tan() / window.height().max(1.0);
+        let depth = cam.pitch.sin().max(0.3);
+        cam.focus += (-right * motion.delta.x + forward * motion.delta.y / depth) * units_per_px;
     }
     if pan != Vec2::ZERO {
         let speed = controls.pan_speed * (cam.distance / 26.0).clamp(0.4, 3.0) * dt;
-        let forward = Vec3::new(-cam.yaw.sin(), 0.0, -cam.yaw.cos());
-        let right = Vec3::new(forward.z, 0.0, -forward.x);
         cam.focus += (right * pan.x + forward * pan.y) * speed;
     }
     if controls.pressed(&keys, "rotate_left") {

@@ -1,0 +1,28 @@
+model  focus_x,focus_y   (pass as --focus X,Y; --zoom 7..12 for units, 18..24 for colonies)
+ant_soldier  12.0,6.0
+ant_grenadier  12.0,10.0
+ant_bazooka  12.0,14.0
+beetle_ladybug  12.0,18.0
+beetle_shrapnel  12.0,22.0
+beetle_cannon  12.0,26.0
+spider_black_widow  12.0,30.0
+spider_sniper  12.0,34.0
+spider_missile  12.0,38.0
+scorpion_savage  12.0,42.0
+scorpion_spear_gun  12.0,46.0
+scorpion_ninja  12.0,50.0
+wasp_assault  12.0,54.0
+wasp_paralysis  12.0,58.0
+wasp_sonic  12.0,62.0
+neutral_bull_ant  26.0,6.0
+neutral_pirate_grenadier  26.0,10.0
+neutral_dragonfly  26.0,14.0
+neutral_desert_fly  26.0,18.0
+neutral_spawn_moth  26.0,22.0
+neutral_flying_machine  26.0,26.0
+colony_ant  68.0,10.0
+colony_beetle  68.0,22.0
+colony_spider  68.0,34.0
+colony_scorpion  68.0,46.0
+colony_wasp  68.0,58.0
+props (rock_large ... candy_jaffa, 5 cells apart)  28.0,72.0

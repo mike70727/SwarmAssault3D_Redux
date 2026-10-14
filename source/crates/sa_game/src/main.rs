@@ -23,7 +23,7 @@ mod views;
 
 use bevy::diagnostic::SystemInformationDiagnosticsPlugin;
 use bevy::prelude::*;
-use bevy::window::{MonitorSelection, PresentMode, WindowMode, WindowResolution};
+use bevy::window::{MonitorSelection, PresentMode, WindowLevel, WindowMode, WindowResolution};
 
 /// Command-line options (all optional).
 #[derive(Resource, Clone, Debug)]
@@ -56,6 +56,11 @@ pub struct CliOptions {
     pub auto_start: bool,
     /// Initial camera distance.
     pub zoom: Option<f32>,
+    /// Start with the simulation paused (model showcase screenshots).
+    pub paused: bool,
+    /// Open the window behind every other window without taking the focus (automated runs on a
+    /// machine someone is using).
+    pub background: bool,
 }
 
 impl Default for CliOptions {
@@ -63,7 +68,7 @@ impl Default for CliOptions {
         Self {
             map: "ants_skirmish.ron".into(),
             screenshot_after: None,
-            screenshot_dir: "screenshots".into(),
+            screenshot_dir: user_path("screenshots").to_string_lossy().to_string(),
             quit_after: None,
             autoplay: false,
             bench_units: None,
@@ -75,6 +80,8 @@ impl Default for CliOptions {
             console_cmd: None,
             auto_start: false,
             zoom: None,
+            paused: false,
+            background: false,
         }
     }
 }
@@ -109,8 +116,10 @@ fn parse_cli() -> CliOptions {
             "--auto-end" => o.auto_end = next(&mut i).and_then(|v| v.parse().ok()),
             "--console-cmd" => o.console_cmd = next(&mut i),
             "--auto-start" => o.auto_start = true,
+            "--paused" => o.paused = true,
+            "--background" => o.background = true,
             "--help" | "-h" => {
-                println!("swarm_assault_3d [--map FILE] [--load SAVE] [--screenshot-after SECS] [--screenshot-dir DIR] [--quit-after SECS] [--autoplay] [--bench N] [--speed X] [--focus X,Y] [--zoom D] [--auto-end SECS] [--console-cmd CMD] [--auto-start] [--menu]");
+                println!("swarm_assault_3d [--map FILE|PATH] [--load SAVE] [--screenshot-after SECS] [--screenshot-dir DIR] [--quit-after SECS] [--autoplay] [--bench N] [--speed X] [--focus X,Y] [--zoom D] [--auto-end SECS] [--console-cmd CMD] [--auto-start] [--menu] [--paused] [--background]");
                 std::process::exit(0);
             }
             _ => eprintln!("unknown argument {a}"),
@@ -165,7 +174,8 @@ fn main() {
         }
     }
     let initial = if direct { AppState::Loading } else { AppState::Menu };
-    let mode = if settings.fullscreen { WindowMode::BorderlessFullscreen(MonitorSelection::Primary) } else { WindowMode::Windowed };
+    let background = cli.background;
+    let mode = if settings.fullscreen && !background { WindowMode::BorderlessFullscreen(MonitorSelection::Primary) } else { WindowMode::Windowed };
     App::new()
         .insert_resource(cli)
         .insert_resource(settings.clone())
@@ -176,8 +186,10 @@ fn main() {
                     primary_window: Some(Window {
                         title: "Swarm Assault 3D".into(),
                         resolution: WindowResolution::new(settings.width.max(640), settings.height.max(480)),
-                        present_mode: if settings.vsync { PresentMode::AutoVsync } else { PresentMode::AutoNoVsync },
+                        present_mode: if settings.vsync && !background { PresentMode::AutoVsync } else { PresentMode::AutoNoVsync },
                         mode,
+                        window_level: if background { WindowLevel::AlwaysOnBottom } else { WindowLevel::Normal },
+                        focused: !background,
                         ..default()
                     }),
                     ..default()
@@ -205,6 +217,18 @@ fn main() {
             bench::BenchPlugin,
         ))
         .run();
+}
+
+/// A file or folder that belongs to the player (saves, progress, screenshots, benchmarks): next to
+/// the `assets` folder, i.e. in the game folder, wherever the game was started from. `SA_USER_DIR`
+/// overrides the base folder.
+pub fn user_path(rel: &str) -> std::path::PathBuf {
+    let base = std::env::var("SA_USER_DIR").map(std::path::PathBuf::from).unwrap_or_else(|_| {
+        let assets = std::path::PathBuf::from(asset_root());
+        let assets = std::fs::canonicalize(&assets).unwrap_or(assets);
+        assets.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."))
+    });
+    base.join(rel)
 }
 
 /// Locate the `assets` directory: next to the executable (release package) or the repo root

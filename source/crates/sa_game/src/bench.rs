@@ -62,9 +62,9 @@ fn write_report_on_exit(mut exits: MessageReader<AppExit>, mut stats: ResMut<Ben
         cli.bench_units.unwrap_or(0)
     );
     info!("BENCHMARK\n{report}");
-    std::fs::create_dir_all("benchmarks").ok();
+    std::fs::create_dir_all(crate::user_path("benchmarks")).ok();
     let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let path = format!("benchmarks/bench_{}_{ts}.txt", cli.bench_units.unwrap_or(0));
+    let path = crate::user_path(&format!("benchmarks/bench_{}_{ts}.txt", cli.bench_units.unwrap_or(0))).to_string_lossy().to_string();
     if let Err(e) = std::fs::write(&path, &report) {
         error!("could not write {path}: {e}");
     } else {

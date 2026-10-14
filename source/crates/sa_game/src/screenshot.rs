@@ -69,7 +69,7 @@ fn quick_save_load(
     mut selection: ResMut<Selection>,
     views: Query<Entity, Or<(With<UnitView>, With<ColonyView>, With<BitView>, With<ProjectileView>)>>,
 ) {
-    let path = std::path::PathBuf::from("saves/quicksave.ron");
+    let path = crate::user_path("saves/quicksave.ron");
     if controls.just_pressed(&keys, "quick_save") {
         match sa_sim::save::save(&sim.world, &path) {
             Ok(()) => info!("saved {}", path.display()),

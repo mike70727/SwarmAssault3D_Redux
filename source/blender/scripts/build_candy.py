@@ -90,7 +90,7 @@ def jaffa():
 BUILDERS = {"candy_jelly_bean": jelly_bean, "candy_gumnut": gumnut, "candy_choc_chip": choc_chip, "candy_smarty": smarty, "candy_jaffa": jaffa}
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("-")] or list(BUILDERS)
+    args = [a for a in salib.script_args() if not a.startswith("-")] or list(BUILDERS)
     for a in args:
         BUILDERS[a]()
         print("BUILT", a, flush=True)

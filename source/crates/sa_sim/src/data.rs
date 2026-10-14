@@ -491,6 +491,11 @@ pub struct MapDef {
     /// Campaign level number (1-100) used for ordering.
     pub number: Option<u32>,
     pub author: String,
+    /// Original ground layout, `height` rows of `width` cells of three hex digits each: the
+    /// tileset template id (two digits) and which quarter of its 48x48 picture covers the cell (one
+    /// digit). Written by tools/add_ground_tiles.py; the pictures come from the player's own copy of
+    /// the original game at run time.
+    pub tiles: Option<String>,
 }
 
 impl Default for MapDef {
@@ -513,6 +518,7 @@ impl Default for MapDef {
             category: "demo".into(),
             number: None,
             author: String::new(),
+            tiles: None,
         }
     }
 }
@@ -577,7 +583,13 @@ impl From<std::io::Error> for DataError {
 }
 
 fn parse_ron<T: for<'de> Deserialize<'de>>(text: &str, what: &str) -> Result<T, DataError> {
-    ron::from_str(text).map_err(|e| DataError::Parse(format!("{what}: {e}")))
+    ron::from_str(strip_bom(text)).map_err(|e| DataError::Parse(format!("{what}: {e}")))
+}
+
+/// Text without a leading UTF-8 byte-order mark (Notepad and PowerShell add one when they save a
+/// data file, and the RON parser rejects it).
+pub fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{feff}').unwrap_or(text)
 }
 
 impl Defs {

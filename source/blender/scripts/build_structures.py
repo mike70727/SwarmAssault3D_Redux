@@ -211,8 +211,8 @@ BUILDERS = {
 }
 
 if __name__ == "__main__":
-    flags = [a for a in sys.argv[1:] if a.startswith("-")]
-    args = [a for a in sys.argv[1:] if not a.startswith("-")] or (list(BUILDERS) if "--all" in flags else ["turret_ant"])
+    flags = [a for a in salib.script_args() if a.startswith("-")]
+    args = [a for a in salib.script_args() if not a.startswith("-")] or (list(BUILDERS) if "--all" in flags else ["turret_ant"])
     for a in args:
         if a not in BUILDERS:
             raise SystemExit(f"unknown structure {a}; choose from {list(BUILDERS)}")

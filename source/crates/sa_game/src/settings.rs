@@ -26,7 +26,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { width: 1280, height: 720, fullscreen: false, vsync: false, msaa: 4, shadows: true, shadow_cascades: 3, shadow_distance: 120.0, master_volume: 0.8, sound_enabled: true, tick_hz: 0.0, unlock_all_levels: false }
+        Self { width: 1280, height: 720, fullscreen: false, vsync: true, msaa: 4, shadows: true, shadow_cascades: 3, shadow_distance: 120.0, master_volume: 0.8, sound_enabled: true, tick_hz: 0.0, unlock_all_levels: false }
     }
 }
 
@@ -34,7 +34,7 @@ impl Settings {
     pub fn load() -> Self {
         let path = std::path::PathBuf::from(asset_root()).join("data/settings.ron");
         match std::fs::read_to_string(&path) {
-            Ok(t) => match ron::from_str::<Settings>(&t) {
+            Ok(t) => match ron::from_str::<Settings>(sa_sim::data::strip_bom(&t)) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("settings.ron invalid ({e}); using defaults");
