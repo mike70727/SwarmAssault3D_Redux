@@ -279,41 +279,50 @@
             name: "Lady Bug", family: Beetle, role: Light, hp: 7600.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
             scan_range: 6.0, build_time: 8.0, weapon: Some("beetle_mg"), aggressive: false,
             model: "beetle_ladybug", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
-            muzzle: Some((0.0, 0.2, 0.55)),
+            // the gun mouth on the shot frame (beetle crew, measured on the GLB)
+            muzzle: Some((0.0, 0.19, 0.88)),
             source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200",
         ),
         "beetle_shrapnel": (
             name: "Shrapnel Beetle", family: Beetle, role: Medium, hp: 20200.0, speed: 2.12, turn_rate: 360.0, radius: 0.48,
             scan_range: 6.0, build_time: 18.0, weapon: Some("beetle_shrapnel"), aggressive: false,
             model: "beetle_shrapnel", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
-            muzzle: Some((0.0, 0.45, 0.0)),
+            // the top of the back launcher as its flaps open (beetle crew)
+            muzzle: Some((0.0, 0.46, 0.28)),
             source: "opensa beetles_medium: HP 20200, Speed 87, BuildDuration 450",
         ),
         "beetle_cannon": (
             name: "Cannon Beetle", family: Beetle, role: Heavy, hp: 7600.0, speed: 1.29, turn_rate: 300.0, radius: 0.45,
             scan_range: 13.0, build_time: 28.0, weapon: Some("beetle_cannon"), aggressive: false,
             model: "beetle_cannon", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
-            muzzle: Some((0.0, 0.45, 0.55)),
+            // the cannon mouth on the shot frame (beetle crew)
+            muzzle: Some((0.0, 0.39, 0.52)),
             source: "opensa beetles_heavy: HP 7600, Speed 53, BuildDuration 700, ScanRadius 13",
         ),
         // ------------------------------------------------------------- spiders
         "spider_black_widow": (
             name: "Black Widow", family: Spider, role: Light, hp: 15400.0, speed: 3.59, turn_rate: 600.0, radius: 0.5,
             scan_range: 6.0, build_time: 8.0, weapon: Some("spider_bite"), melee: true, aggressive: true,
-            model: "spider_black_widow", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            // 0.45: one idle tick between bites instead of three, same bite rate (spider crew)
+            model: "spider_black_widow", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
+            // where the fangs close at the strike (spider crew)
+            muzzle: Some((0.0, 0.07, 0.74)),
             source: "opensa spiders_light: HP 15400, Speed 147, BuildDuration 200, stance AttackAnything",
         ),
         "spider_sniper": (
             name: "Spider Sniper", family: Spider, role: Medium, hp: 6900.0, speed: 2.25, turn_rate: 480.0, radius: 0.5,
             scan_range: 13.0, build_time: 18.0, weapon: Some("spider_sniper"), aggressive: false,
             model: "spider_sniper", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            // the flash on the carapace front (spider crew)
+            muzzle: Some((0.0, 0.46, 0.20)),
             source: "opensa spiders_medium: HP 6900, Speed 92, BuildDuration 450, ScanRadius 13",
         ),
         "spider_missile": (
             name: "Missile Spider", family: Spider, role: Heavy, hp: 13000.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
             scan_range: 17.0, build_time: 22.0, weapon: Some("spider_missile"), aggressive: false,
             model: "spider_missile", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
-            muzzle: Some((0.0, 0.55, 0.0)),
+            // between the two front tube mouths of the back launcher (spider crew)
+            muzzle: Some((0.0, 0.58, -0.09)),
             source: "opensa spiders_heavy: HP 13000, Speed 92, BuildDuration 550, ScanRadius 17",
         ),
         // ----------------------------------------------------------- scorpions
@@ -343,24 +352,30 @@
         ),
         // --------------------------------------------------------------- wasps
         "wasp_assault": (
-            name: "Assault Wasp", family: Wasp, role: Light, hp: 5300.0, speed: 4.81, turn_rate: 720.0, radius: 0.38,
+            name: "Assault Wasp", family: Wasp, role: Light, hp: 5300.0, speed: 4.81, turn_rate: 720.0, radius: 0.55,
             scan_range: 8.0, build_time: 10.0, weapon: Some("wasp_mg"), flying: true, air: false, altitude: 0.7, aggressive: false,
-            model: "wasp_assault", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
-            muzzle: Some((0.0, -0.3, 0.35)),
+            // scale 1.5 = the original sprite's size (wasp crew: the model was 0.67x it); 0.23 s lets the
+            // abdomen gun fire at its 0.2 s reload
+            model: "wasp_assault", model_scale: 1.5, attack_anim_time: 0.23, death_time: 1.2,
+            // the abdomen tip, curled forward under the body (wasp crew, at model_scale 1.5)
+            muzzle: Some((0.0, 0.24, 0.05)),
             source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain",
         ),
         "wasp_paralysis": (
-            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.5,
+            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.4,
             scan_range: 15.0, build_time: 14.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
-            model: "wasp_paralysis", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
-            muzzle: Some((0.0, -0.3, 0.45)),
+            // scale 0.72 = the original sprite's size (wasp crew: the model was 1.38x it)
+            model: "wasp_paralysis", model_scale: 0.72, attack_anim_time: 0.4, death_time: 1.2,
+            // the paralysis arrow's tip (wasp crew, at model_scale 0.72)
+            muzzle: Some((0.0, 0.22, 0.62)),
             source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15",
         ),
         "wasp_sonic": (
             name: "Sonic Wasp", family: Wasp, role: Heavy, hp: 15400.0, speed: 3.78, turn_rate: 720.0, radius: 0.45,
             scan_range: 8.0, build_time: 22.0, weapon: Some("wasp_sonic"), flying: true, air: false, altitude: 0.7, aggressive: false,
-            model: "wasp_sonic", model_scale: 1.0, attack_anim_time: 0.25, death_time: 1.2,
-            muzzle: Some((0.0, -0.1, 0.45)),
+            model: "wasp_sonic", model_scale: 0.97, attack_anim_time: 0.2, death_time: 1.2,
+            // the sonic bell's mouth under the face (wasp crew, at model_scale 0.97)
+            muzzle: Some((0.0, 0.39, 0.65)),
             source: "opensa wasps_heavy: HP 15400, Speed 155, BuildDuration 550",
         ),
         // ------------------------------------------------------------- neutral

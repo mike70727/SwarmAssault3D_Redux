@@ -48,10 +48,40 @@ stride window is shifted (when needed) so both ends of the stance stay within th
 Death = the corpse of the sprites: the bug tips onto one side, turns and settles with the shell on the
 ground, the legs splay and follow the body (feet never below the ground).  Every build appends a
 numeric report (feet, knees, ankle gaps, planted-foot travel, shell ground contact) to
-qa/agents/beetles/feet_check_report.txt.
+qa/agents/beetle_attacks/feet_check_report.txt.
+
+Attack clips (beetle attack crew, 2026-10-13) - each one reproduces the original's two attack frames
+(Game.ANI UNBET??Y_AT<facing>: frame 0 for 100 ms, then frame 1 = "Fire Point" for 100 ms, the
+cannon's for 300 ms).  The game restarts `attack` at every shot at speed (clip length /
+attack_anim_time) and releases the shot `fire_delay` after the start (units.ron: lady bug 0.3 s /
+0.05 s, shrapnel and cannon 0.6 s / 0.2 s).  The glTF export puts frame f at f/30 s, so the clips have
+9 / 18 frames (0.3 s / 0.6 s: played at speed 1) and the shot is on frame 2 / frame 6 (sim ticks 2 / 6):
+* Lady Bug: the sprites show only a muzzle flash - frame 1 a 4 x 3 px orange star on the gun's mouth,
+  frame 0 a 2 x 2 px flash 2 px ahead of it (the round leaving).  Here: the clip starts and ends in
+  the idle stance (it is restarted every 10 sim ticks, so back-to-back shots read as continuous fire);
+  on the shot frame an orange star flash opens on the gun's mouth, the barrel kicks back, the head
+  jerks up, then the flash shrinks and flies ahead (the small detached flash) and goes out.
+* Shrapnel: on the shield's front the pale launcher (stand: a pale knob) first rises (frame 0) and
+  then shows an eight-armed pale star ~10 px across (frame 1).  Here the launcher is a dark core tube
+  inside eight pale staves hinged at its top rim (from outside the portrait's short pale cylinder with
+  the dark opening): the bug squats and the launcher rises, then the staves fling open into the
+  eight-armed star around a pale burst flash as the volley leaves, the bug jolts up, and the staves
+  fold shut again.
+* Cannon: the pale barrel line on the pronotum shortens by ~3 px (frame 0 partly, frame 1 fully: the
+  barrel recoils into the breech; no flash).  Here the beetle braces (body lowered, nose down), on the
+  shot the barrel slams back 0.13 cells into the breech, the body rocks back and up on its planted
+  legs, the antennae whip, and the barrel runs out again.  The barrel is medium-grey metal (the
+  portrait's barrel; from above it reads as the sprites' grey line).
+The muzzle flashes are modelled full size, the mesh is UV-unwrapped, and then the flash parts are
+shrunk to 1/FLASH_SHRINK around their bone's head: invisible at rest and in the bind pose; the attack
+clip scales the flash bone up by FLASH_SHRINK while it shows (finalize_unwrapped() = salib's
+finalize_asset without the re-unwrap).  Each build appends the muzzle points measured on the posed
+model (gun mouth / launcher top / cannon mouth, game axes: x right, y up, z ahead) to
+qa/agents/beetle_attacks/muzzle_report.txt.
 
 Usage:  blender -b --factory-startup --python build_beetle.py -- [beetle_ladybug beetle_shrapnel
-beetle_cannon] [--quick]      (--quick: no bake/export, EEVEE renders into qa/agents/beetles/quick)
+beetle_cannon] [--quick]      (--quick: no bake/export; saves qa/agents/beetle_attacks/quick/
+<asset>_quick.blend for the crew's render scripts)
 """
 import math
 import os
@@ -61,7 +91,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
-from mathutils import Euler, Vector  # noqa: E402
+from mathutils import Euler, Matrix, Vector  # noqa: E402
 
 import salib  # noqa: E402
 from salib import BoneDef, Body, Clip, LegSpec  # noqa: E402
@@ -72,8 +102,11 @@ VARIANTS = {
     "beetle_cannon": dict(kind="cannon"),
 }
 
-QUICK_DIR = r"D:\SwarmAssault3D-complete\qa\agents\beetles\quick"
-REPORT = r"D:\SwarmAssault3D-complete\qa\agents\beetles\feet_check_report.txt"
+CREW_DIR = r"D:\SwarmAssault3D-complete\qa\agents\beetle_attacks"
+QUICK_DIR = os.path.join(CREW_DIR, "quick")
+REPORT = os.path.join(CREW_DIR, "feet_check_report.txt")
+MUZZLE_REPORT = os.path.join(CREW_DIR, "muzzle_report.txt")
+FLASH_SHRINK = 40.0   # muzzle flashes: modelled full size, shrunk to 1/40 after the UV unwrap (see build())
 
 
 # --------------------------------------------------------------------------------------------
@@ -458,6 +491,92 @@ def feet_report(variant, rig, mesh, specs, out_path):
         fh.write(text + "\n")
 
 
+# --------------------------------------------------------------------------------------------
+# attack helpers (beetle attack crew)
+# --------------------------------------------------------------------------------------------
+def key_pose(clip, rig, bone, frame, rot_axis=None, angle=0.0, move=(0.0, 0.0, 0.0), pivot=None, scale=None):
+    """Key a pose bone from armature-space quantities: a rotation of `angle` degrees about the armature-
+    space axis `rot_axis` through `pivot` (default: the bone's head), then a translation `move`.  The
+    vectors are converted through the bone's rest orientation, i.e. they are taken in its parent's
+    frame as it is at rest (a child of a posed bone moves with it)."""
+    b = rig.data.bones[bone]
+    m3 = b.matrix_local.to_3x3()
+    mi = m3.inverted()
+    rw = Matrix.Rotation(math.radians(angle), 3, Vector(rot_axis).normalized()) if rot_axis and angle else Matrix.Identity(3)
+    rb = mi @ rw @ m3
+    loc = mi @ Vector(move)
+    if pivot is not None:
+        q0 = mi @ (Vector(pivot) - b.head_local)
+        loc = loc + q0 - rb @ q0
+    rot = tuple(math.degrees(a) for a in rb.to_euler("XYZ"))
+    clip.key(bone, frame, rot=rot, loc=tuple(loc), scale=scale)
+
+
+def shrink_group(mesh, group, center, factor):
+    """Scale the vertices of the (rigidly skinned) part `group` toward `center` by 1/factor."""
+    gi = mesh.vertex_groups[group].index
+    c = Vector(center)
+    n = 0
+    for v in mesh.data.vertices:
+        if any(g.group == gi and g.weight > 0.5 for g in v.groups):
+            v.co = c + (v.co - c) / factor
+            n += 1
+    mesh.data.update()
+    salib.log(f"{group}: {n} vertices shrunk 1/{factor:g} around {tuple(round(x, 3) for x in center)}")
+    return n
+
+
+def align_rolls(rig, z_axes):
+    """Roll the named bones so that their local Z axis points along the given armature-space vector."""
+    salib.select_only([rig])
+    bpy.ops.object.mode_set(mode="EDIT")
+    for name, z in z_axes.items():
+        rig.data.edit_bones[name].align_roll(Vector(z))
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def finalize_unwrapped(asset, objects, preview_radius, preview_center, views):
+    """salib.finalize_asset() minus its UV unwrap: the mesh was unwrapped right after the join, before the
+    muzzle flashes were shrunk (a fresh unwrap would give the shrunken flash a speck of the texture)."""
+    meshes = [o for o in objects if o.type == "MESH"]
+    if salib.REALISM:
+        for i, m in enumerate(meshes):
+            images = salib.bake_object_textures(m, asset, size=1024 if i == 0 else 512)
+            salib.build_baked_materials(m, asset, images)
+    path = salib.export_glb(asset, objects=objects)
+    summary = salib.print_summary(path)
+    previews = salib.render_previews(asset, radius=preview_radius, center=preview_center, size=512, samples=64,
+                                     views=views)
+    salib.contact_sheet(asset, previews)
+    salib.save_blend(asset)
+    return path, summary
+
+
+def muzzle_report(variant, rig, muzzle, out_path):
+    """Where the shot leaves, measured on the baked attack clip: `muzzle` = (bone, rest point, shot frame).
+    Game axes (units.ron `muzzle`): x to the unit's right (-X here), y up (Z), z ahead (-Y); cells."""
+    bone, p_rest, shot = muzzle
+    sc = bpy.context.scene
+    t = next(t for t in rig.animation_data.nla_tracks if t.name == "attack")
+    t.is_solo = True
+    n = int(t.strips[0].frame_end)
+    inv = rig.data.bones[bone].matrix_local.inverted()
+    lines = [f"=== {variant} muzzle ({bone} at rest {tuple(round(x, 3) for x in p_rest)}), attack clip {n} frames"]
+    for f in range(1, n + 1):
+        sc.frame_set(f)
+        bpy.context.view_layer.update()
+        p = rig.matrix_world @ rig.pose.bones[bone].matrix @ inv @ Vector(p_rest)
+        lines.append(f"  f{f:02d}  x {-p.x:+.3f}  y {p.z:.3f}  z {-p.y:+.3f}" + ("   <- shot" if f == shot else ""))
+        if f == shot:
+            lines.insert(1, f"SUMMARY {variant} muzzle at the shot (frame {shot}): ({-p.x:.2f}, {p.z:.2f}, {-p.y:.2f})")
+    t.is_solo = False
+    sc.frame_set(1)
+    text = "\n".join(lines)
+    print(text, flush=True)
+    with open(out_path, "a", encoding="utf-8") as fh:
+        fh.write(text + "\n")
+
+
 def mirror_specs(left, radius):
     """Left-side leg table (name, root, knee, foot, phase) -> LegSpecs for both sides."""
     specs = []
@@ -553,94 +672,12 @@ def attach_spots(mat, spots, edge=0.006):
     _multiply_into(nt, src, fac, sock)
 
 
-# the original sprites' camera: ~70 deg elevation from the south (estimated from how far the lady
-# bug's spots shift between the "faces up" and "faces down" frames); "sprite_up" looks at the bug
-# from behind (= the faces-up frame), "sprite_down" from the front
-SPRITE_VIEWS = {"sprite_up": (180.0, 70.0), "sprite_down": (0.0, 70.0)}
-
-
-def quick_renders(asset, rig, radius, center, views=("top", "threequarter", "front", "right", "sprite_up", "sprite_down"),
-                  poses=(("death", 36, ("threequarter", "top")), ("attack", 3, ("threequarter",)),
-                         ("move", 1, ("right", "threequarter")), ("move", 0, ("right",))), size=448):
-    """EEVEE renders of the rest pose plus poses of the clips (each NLA track soloed); a move frame of
-    0 means the middle of the cycle."""
-    os.makedirs(QUICK_DIR, exist_ok=True)
-    sc = bpy.context.scene
-    cam_data = bpy.data.cameras.new("QuickCam")
-    cam_data.lens = 50
-    cam = bpy.data.objects.new("QuickCam", cam_data)
-    salib.link(cam)
-    sun_data = bpy.data.lights.new("QuickSun", "SUN")
-    sun_data.energy = 2.5
-    sun_data.angle = math.radians(8)
-    sun = bpy.data.objects.new("QuickSun", sun_data)
-    salib.link(sun)
-    sun.rotation_euler = (math.radians(50), math.radians(10), math.radians(-35))
-    fill_data = bpy.data.lights.new("QuickFill", "SUN")
-    fill_data.energy = 0.7
-    fill = bpy.data.objects.new("QuickFill", fill_data)
-    salib.link(fill)
-    fill.rotation_euler = (math.radians(60), 0, math.radians(140))
-    bpy.ops.mesh.primitive_circle_add(radius=radius * 2.5, fill_type="NGON", location=(0, 0, -0.001))
-    ground = bpy.context.object
-    ground.name = "QuickGround"
-    ground.data.materials.append(salib.material("M_PreviewGround", (0.36, 0.42, 0.26), roughness=1.0))
-    sc.camera = cam
-    try:
-        sc.render.engine = "BLENDER_EEVEE"
-    except TypeError:
-        sc.render.engine = "BLENDER_EEVEE_NEXT"
-    sc.view_settings.view_transform = "Standard"
-    sc.view_settings.look = "None"
-    if sc.world and sc.world.node_tree:
-        bg = sc.world.node_tree.nodes.get("Background")
-        if bg:
-            bg.inputs[1].default_value = 0.45
-    sc.render.resolution_x = size
-    sc.render.resolution_y = size
-    sc.render.resolution_percentage = 100
-    sc.render.image_settings.file_format = "JPEG"
-    sc.render.image_settings.quality = 88
-    c = Vector(center)
-
-    def shoot(view, name):
-        az, el = SPRITE_VIEWS[view] if view in SPRITE_VIEWS else salib.PREVIEW_VIEWS[view]
-        az_r, el_r = math.radians(az), math.radians(el)
-        pos = c + Vector((-math.sin(az_r) * math.cos(el_r) * radius, -math.cos(az_r) * math.cos(el_r) * radius,
-                          math.sin(el_r) * radius))
-        cam.location = pos
-        cam.rotation_euler = (c - pos).to_track_quat("-Z", "Y").to_euler()
-        sc.render.filepath = os.path.join(QUICK_DIR, name)
-        bpy.ops.render.render(write_still=True)
-        salib.log("quick", sc.render.filepath)
-
-    tracks = rig.animation_data.nla_tracks if rig.animation_data else []
-    for t in tracks:
-        t.is_solo = False
-    sc.frame_set(1)
-    for v in views:
-        shoot(v, f"{asset}_q_{v}.jpg")
-    for clip, frame, vs in poses:
-        t = next((t for t in tracks if t.name == clip), None)
-        if t is None:
-            continue
-        if frame == 0:
-            frame = 1 + int(t.strips[0].frame_end) // 2
-        t.is_solo = True
-        sc.frame_set(frame)
-        for v in vs:
-            shoot(v, f"{asset}_q_{clip}{frame}_{v}.jpg")
-        t.is_solo = False
-    sc.frame_set(1)
-    for o in (cam, sun, fill, ground):
-        bpy.data.objects.remove(o, do_unlink=True)
-
-
 # --------------------------------------------------------------------------------------------
 # Lady Bug
 # --------------------------------------------------------------------------------------------
 LB_DOME_C = (0.0, 0.03, 0.13)
 LB_DOME_R = (0.5625, 0.60, 0.44)
+LB_MUZZLE = (0.0, -0.885, 0.19)    # just in front of the gun's muzzle ring (its face is at y -0.88)
 
 
 def ladybug_marks(d, S):
@@ -701,6 +738,18 @@ def build_ladybug(body, mats):
     # minigun barrel: the thin line in front of the sprite (muzzle flash there when attacking)
     body.cylinder("gun", "M_Accent", (0.0, -0.77, 0.19), 0.022, 0.18, rot=(math.radians(90), 0, 0), verts=8)["sa_no_subdiv"] = True
     body.cylinder("gun", K, (0.0, -0.86, 0.19), 0.03, 0.04, rot=(math.radians(90), 0, 0), verts=8)["sa_no_subdiv"] = True
+    # muzzle flash (the attack frames' orange star on the gun's mouth, 4 x 3 px = 0.17 x 0.12 cells): a
+    # core, a forward tongue and four side spikes; modelled full size, shrunk to nothing after the UV
+    # unwrap and scaled up by the attack clip while it shows
+    mats["M_Flash"] = salib.material("M_Flash", (1.0, 0.58, 0.20), roughness=0.6, emission=(1.0, 0.42, 0.08),
+                                     emission_strength=2.0, kind="emissive", variation=0.05)
+    m = Vector(LB_MUZZLE)
+    core = m + Vector((0.0, -0.022, 0.0))
+    shaped_sphere(body, "flash", "M_Flash", tuple(core), (0.036, 0.03, 0.034), segments=8, rings=5, subdiv=False)
+    body.segment("flash", "M_Flash", tuple(m), tuple(m + Vector((0.0, -0.12, 0.0))), 0.03, 0.002, verts=6)["sa_no_subdiv"] = True
+    for d, ln in (((1.0, -0.7, 0.0), 0.09), ((-1.0, -0.7, 0.0), 0.09), ((0.0, -0.75, 1.0), 0.06), ((0.0, -0.75, -1.0), 0.06)):
+        tip = core + Vector(d).normalized() * ln
+        body.segment("flash", "M_Flash", tuple(core), tuple(tip), 0.017, 0.001, verts=5)["sa_no_subdiv"] = True
     # legs: short and tucked under the rim - from above the sprite shows none; only the toes peek out
     # (as in the loading-screen renders).  Rim half-width: 0.37 at y -0.42, 0.56 at y 0, 0.44 at y 0.40.
     specs = mirror_specs([
@@ -714,8 +763,10 @@ def build_ladybug(body, mats):
         BoneDef("body", (0, 0.4, 0.2), (0, -0.3, 0.2), parent="root"),
         BoneDef("head", (0, -0.40, 0.18), (0, -0.74, 0.18), parent="body"),
         BoneDef("gun", (0, -0.66, 0.19), (0, -0.90, 0.19), parent="head"),
+        BoneDef("flash", LB_MUZZLE, (0, -0.985, 0.19), parent="gun"),
     ]
     return specs, bones, dict(mask=ladybug_marks, frame=(-0.5625, -0.57, 1.125, 1.20), spots=ladybug_spots(), toes=toes,
+                              flashes=[("flash", LB_MUZZLE)], muzzle=("gun", (0.0, -0.88, 0.19), 2),
                               preview_radius=2.8, preview_center=(0, 0, 0.25), antennae=(),
                               walk=dict(frames=6, lift=0.04, bob=0.006),     # 0.2 s scurry, stride 0.25
                               death=dict(roll=26, pitch=-10, yaw=28, splay=0.05))
@@ -724,6 +775,58 @@ def build_ladybug(body, mats):
 # --------------------------------------------------------------------------------------------
 # Shrapnel
 # --------------------------------------------------------------------------------------------
+SH_LX, SH_LY = 0.0, -0.27                       # launcher axis on the shield's front
+SH_Z_TOP = 0.445                                # launcher top rim (= where the volley leaves)
+SH_R_CORE, SH_R_IN, SH_R_OUT = 0.060, 0.064, 0.078
+SH_STAVE_LEN = 0.15                             # opened flat: a star 0.45 across (the sprites' ~10 px)
+SH_FLASH = (SH_LX, SH_LY, SH_Z_TOP + 0.005)
+
+
+def stave_hinge(k):
+    """Hinge of stave k (angle k x 45 deg around the launcher; k 0 = +X, k 6 = -Y = forward) on the top rim."""
+    th = math.radians(45.0 * k)
+    r = 0.5 * (SH_R_IN + SH_R_OUT)
+    return Vector((SH_LX + r * math.cos(th), SH_LY + r * math.sin(th), SH_Z_TOP))
+
+
+def launcher_stave(body, k, bone, mat):
+    """Stave k of the shrapnel launcher: a curved plate (38 deg of the rim, 0.014 thick) hanging down the
+    outside of the core tube from the top rim; the eight of them make the launcher's pale wall."""
+    import bmesh
+
+    th0 = math.radians(45.0 * k)
+    steps, half = 4, math.radians(19.0)
+    verts = []
+    for i in range(steps + 1):
+        a = th0 - half + 2.0 * half * i / steps
+        for r in (SH_R_OUT, SH_R_IN):
+            for z in (SH_Z_TOP, SH_Z_TOP - SH_STAVE_LEN):
+                verts.append((SH_LX + r * math.cos(a), SH_LY + r * math.sin(a), z))
+
+    def ix(i, ri, zi):
+        return i * 4 + ri * 2 + zi
+
+    faces = []
+    for i in range(steps):
+        faces += [(ix(i, 0, 0), ix(i, 0, 1), ix(i + 1, 0, 1), ix(i + 1, 0, 0)),      # outer face
+                  (ix(i, 1, 0), ix(i + 1, 1, 0), ix(i + 1, 1, 1), ix(i, 1, 1)),      # inner face
+                  (ix(i, 0, 0), ix(i + 1, 0, 0), ix(i + 1, 1, 0), ix(i, 1, 0)),      # top edge
+                  (ix(i, 0, 1), ix(i, 1, 1), ix(i + 1, 1, 1), ix(i + 1, 0, 1))]      # bottom edge
+    for i in (0, steps):
+        faces.append((ix(i, 0, 0), ix(i, 1, 0), ix(i, 1, 1), ix(i, 0, 1)))           # side edges
+    me = bpy.data.meshes.new(f"{body.name}_stave{k}")
+    me.from_pydata(verts, [], faces)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new(f"{body.name}_stave{k}", me)
+    salib.link(o)
+    o["sa_no_subdiv"] = True
+    return body._finish(o, bone, mat)
+
+
 def shrapnel_marks(d, S):
     """Skull marking over the shield box x [-0.39, 0.39], y [-0.42, 0.58]; (u, v) fractions, v from
     the front.  Traced from the sprites (up/down facings averaged for the along-body positions)."""
@@ -762,9 +865,28 @@ def build_shrapnel(body, mats):
         shaped_sphere(body, "head", "M_Eye", (s * 0.12, -0.55, 0.21), (0.032, 0.028, 0.032), segments=8, rings=5, subdiv=False)
         ab = "antenna.L" if s > 0 else "antenna.R"
         body.segment(ab, K, (s * 0.09, -0.57, 0.20), (s * 0.21, -0.74, 0.24), 0.013, 0.008, verts=6)["sa_no_subdiv"] = True
-    # shrapnel launcher: pale open cylinder standing on the front-centre of the shield
-    body.cylinder("launcher", "M_Pale", (0.0, -0.27, 0.36), 0.078, 0.17, verts=10)["sa_no_subdiv"] = True
-    body.cylinder("launcher", K, (0.0, -0.27, 0.442), 0.058, 0.012, verts=10)["sa_no_subdiv"] = True
+    # shrapnel launcher on the front-centre of the shield: a dark core tube inside eight pale staves hinged
+    # at the top rim - from outside the portrait's short pale cylinder with the dark opening on top; the
+    # attack throws the staves open into the eight-armed pale star of the sprites' Fire Point frames
+    zb = 0.22
+    body.cylinder("launcher", K, (SH_LX, SH_LY, (zb + SH_Z_TOP) / 2), SH_R_CORE, SH_Z_TOP - zb, verts=12)["sa_no_subdiv"] = True
+    # staves: pale grey like the sprites' launcher and star, less metallic than the shared M_Pale (which reads
+    # dark grey in game), no baked crevice dirt (their inner faces sit against the core tube and would bake
+    # dark, then face up when the staves open)
+    mats["M_Pale"] = salib.material("M_Pale", (0.80, 0.80, 0.78), roughness=0.4, metallic=0.35, kind="chitin", coat=0.4,
+                                    sss=0.0, variation=0.1, bump=0.05, dirt=0.0)
+    for k in range(8):
+        launcher_stave(body, k, f"launcher.petal.{k}", "M_Pale")
+    # burst flash in the opened launcher (pale yellow-white like the sprites' star), shrunk at rest
+    mats["M_Flash"] = salib.material("M_Flash", (1.0, 0.93, 0.72), roughness=0.6, emission=(1.0, 0.85, 0.55),
+                                     emission_strength=2.5, kind="emissive", variation=0.05)
+    c = Vector((SH_LX, SH_LY, SH_Z_TOP + 0.035))
+    shaped_sphere(body, "launcher.flash", "M_Flash", tuple(c), (0.06, 0.06, 0.05), segments=8, rings=5, subdiv=False)
+    for k in range(8):
+        a = math.radians(22.5 + 45.0 * k)
+        tip = c + Vector((math.cos(a), math.sin(a), 0.35)).normalized() * 0.13
+        body.segment("launcher.flash", "M_Flash", tuple(c), tuple(tip), 0.022, 0.002, verts=5)["sa_no_subdiv"] = True
+    body.segment("launcher.flash", "M_Flash", tuple(c), tuple(c + Vector((0.0, 0.0, 0.11))), 0.025, 0.002, verts=5)["sa_no_subdiv"] = True
     # six long legs splayed wide, knees above the shield.  Sprite (faces up) toe positions: front
     # (+-0.65, -0.66), middle (+-0.60, -0.08), rear (+-0.52, +0.42); the shield's half-width is 0.39.
     specs = mirror_specs([
@@ -781,7 +903,15 @@ def build_shrapnel(body, mats):
         BoneDef("antenna.R", (-0.09, -0.57, 0.20), (-0.21, -0.74, 0.24), parent="head"),
         BoneDef("launcher", (0, -0.27, 0.27), (0, -0.27, 0.47), parent="body"),
     ]
-    return specs, bones, dict(mask=shrapnel_marks, frame=(-0.39, -0.42, 0.78, 1.0), toes=toes,
+    rolls = {}
+    for k in range(8):
+        th = math.radians(45.0 * k)
+        h = stave_hinge(k)
+        bones.append(BoneDef(f"launcher.petal.{k}", tuple(h), tuple(h - Vector((0.0, 0.0, 0.1))), parent="launcher"))
+        rolls[f"launcher.petal.{k}"] = (-math.cos(th), -math.sin(th), 0.0)     # local X = the hinge's tangent
+    bones.append(BoneDef("launcher.flash", SH_FLASH, (SH_LX, SH_LY, SH_Z_TOP + 0.105), parent="launcher"))
+    return specs, bones, dict(mask=shrapnel_marks, frame=(-0.39, -0.42, 0.78, 1.0), toes=toes, rolls=rolls,
+                              flashes=[("launcher.flash", SH_FLASH)], muzzle=("launcher", (SH_LX, SH_LY, SH_Z_TOP), 6),
                               preview_radius=2.8, preview_center=(0, 0, 0.2), antennae=("antenna.L", "antenna.R"),
                               walk=dict(frames=10, lift=0.10, bob=0.01),     # 0.33 s cycle, stride 0.42
                               death=dict(roll=32, pitch=-7, yaw=-24, splay=0.16))
@@ -803,7 +933,6 @@ def cannon_marks(d, S):
 def build_cannon(body, mats):
     T, B = "M_Team", "M_Brown"
     salib.material(T, salib.TEAM_COLORS["Y"], roughness=0.4, kind="chitin", tint=True, coat=0.5, sss=0.1, variation=0.35)
-    mats["M_Gun"] = salib.material("M_Gun", (0.20, 0.20, 0.22), roughness=0.4, metallic=0.85, kind="metal")
     # long team-coloured elytra: blunt front edge, straight sides, rounded rear (y -0.02 .. 0.74)
     shaped_sphere(body, "body", T, (0, 0.36, 0.20), (0.29, 0.38, 0.22), segments=24, rings=14, squash=0.3,
                   taper=(1.0, 0.92), shape=capsule(front=0.35, rear=0.62))
@@ -823,13 +952,14 @@ def build_cannon(body, mats):
             if i < 2:
                 shaped_sphere(body, ab, "M_Amber", pts[i + 1], (0.016,) * 3, segments=6, rings=4, subdiv=False)
     # cannon: saddle, wide pale breech over the elytra/pronotum junction, grey barrel forward over the head
-    # (saddle in the same dark gun metal as the barrel: one material / draw call fewer)
-    shaped_sphere(body, "cannon", "M_Gun", (0.0, -0.08, 0.30), (0.13, 0.15, 0.09), segments=12, rings=6, subdiv=False)
-    # (the portrait's barrel is dark gunmetal, much darker than the pale breech; from above - the
-    # sprite - only the pale breech patch reads against the dark pronotum)
+    # (saddle in the same metal as the barrel: one material / draw call fewer)
+    shaped_sphere(body, "cannon", "M_Accent", (0.0, -0.08, 0.30), (0.13, 0.15, 0.09), segments=12, rings=6, subdiv=False)
     body.cylinder("cannon", "M_Pale", (0.0, -0.09, 0.41), 0.105, 0.24, rot=(math.radians(90), 0, 0), verts=12)["sa_no_subdiv"] = True
-    body.cylinder("cannon", "M_Gun", (0.0, -0.34, 0.42), 0.072, 0.32, rot=(math.radians(90), 0, 0), verts=10)["sa_no_subdiv"] = True
-    body.cylinder("cannon", "M_Black", (0.0, -0.49, 0.42), 0.086, 0.05, rot=(math.radians(90), 0, 0), verts=10)["sa_no_subdiv"] = True
+    # barrel + black muzzle ring on their own bone: the attack's recoil slides them 0.13 back into the breech
+    # (the sprites' grey barrel line shortens by ~3 px).  Medium-grey metal - the portrait's barrel is grey,
+    # darker than the pale breech, and from above it reads as the sprites' grey line.
+    body.cylinder("barrel", "M_Accent", (0.0, -0.34, 0.42), 0.072, 0.32, rot=(math.radians(90), 0, 0), verts=10)["sa_no_subdiv"] = True
+    body.cylinder("barrel", "M_Black", (0.0, -0.49, 0.42), 0.086, 0.05, rot=(math.radians(90), 0, 0), verts=10)["sa_no_subdiv"] = True
     # six long legs: front pair forward, middle pair out, rear pair back past the elytra.  Sprite toe
     # positions: front (+-0.46, -0.44), middle (+-0.67, +0.27), rear (+-0.50, +0.83); 2-px femurs.
     # Plain medium-brown legs with dark joints (the sprite's leg pixels are ~(100, 75, 58) sRGB, no amber).
@@ -848,14 +978,91 @@ def build_cannon(body, mats):
         BoneDef("antenna.L", (0.15, -0.70, 0.24), (0.22, -1.05, 0.33), parent="head"),
         BoneDef("antenna.R", (-0.15, -0.70, 0.24), (-0.22, -1.05, 0.33), parent="head"),
         BoneDef("cannon", (0, 0.03, 0.41), (0, -0.50, 0.41), parent="body"),
+        BoneDef("barrel", (0, -0.18, 0.42), (0, -0.52, 0.42), parent="cannon"),
     ]
     return specs, bones, dict(mask=cannon_marks, frame=(-0.29, -0.02, 0.58, 0.76), toes=toes,
+                              muzzle=("barrel", (0.0, -0.515, 0.42), 6),
                               preview_radius=3.0, preview_center=(0, 0, 0.2), antennae=("antenna.L", "antenna.R"),
                               walk=dict(frames=10, lift=0.10, bob=0.012),    # 0.33 s cycle, stride 0.42
                               death=dict(roll=20, pitch=-5, yaw=30, splay=0.14))
 
 
 BUILDERS = {"ladybug": build_ladybug, "shrapnel": build_shrapnel, "cannon": build_cannon}
+
+
+# --------------------------------------------------------------------------------------------
+# attack clips (see the module docstring)
+# --------------------------------------------------------------------------------------------
+NOSE_UP = (-1.0, 0.0, 0.0)      # armature-space axis: a positive angle about it lifts the front (-Y) end
+
+
+def key_attack(kind, rig, specs, info):
+    """The `attack` clip.  The exporter writes frame f at f/30 s, so 9 frames = 0.3 s (lady bug) and 18 frames
+    = 0.6 s (shrapnel, cannon): speed 1 at the units.ron attack_anim_time.  The sim releases the shot
+    fire_delay after the start, on its 30 Hz tick 2 (lady bug, 0.05 s) / tick 6 (0.2 s) = frame 2 / frame 6.
+    Feet stay planted (IK targets at rest)."""
+    n = 9 if kind == "ladybug" else 18
+    c = new_clip(rig, "attack", n, loop=False)
+    for spec in specs:
+        c.key(f"leg.{spec.name}.ik", n, loc=(0, 0, 0))
+    S = FLASH_SHRINK
+    if kind == "ladybug":
+        # frame: (flash size x the modelled star (0 = out), flash distance ahead of the mouth, barrel kick
+        # back, head jerk (deg, nose up), body pushed back).  Frames 1 and 9 are the idle stance (the clip
+        # restarts every 0.33 s while it fires: continuous fire); on the shot (frame 2) the star opens on the
+        # gun's mouth (sprite frame 1), then it shrinks and drifts ahead as the sprites' small detached flash
+        # (frame 0) and goes out: lit for about half of each shot, like the sprites' looping two frames.
+        plan = {1: (0, 0, 0, 0, 0), 2: (1.35, 0.0, 0.0, 0.0, 0.0), 3: (1.2, 0.02, 0.03, 2.0, 0.010),
+                4: (0.8, 0.06, 0.022, 1.2, 0.007), 5: (0.6, 0.09, 0.012, 0.5, 0.004),
+                6: (0.45, 0.12, 0.005, 0.2, 0.002), 7: (0, 0.12, 0, 0, 0), 8: (0, 0, 0, 0, 0), 9: (0, 0, 0, 0, 0)}
+        for f, (fs, ahead, kick, jerk, push) in plan.items():
+            s = S * fs if fs else 1.0
+            key_pose(c, rig, "flash", f, move=(0.0, -ahead, 0.0), scale=(s, s, s))
+            key_pose(c, rig, "gun", f, move=(0.0, kick, 0.0))
+            key_pose(c, rig, "head", f, rot_axis=NOSE_UP, angle=jerk)
+            key_pose(c, rig, "body", f, move=(0.0, push, 0.0))
+    elif kind == "shrapnel":
+        # frame: (body squat, body pitch (deg, nose up), launcher rise, staves opened (deg from hanging),
+        # burst flash size).  Wind-up: the bug squats and the launcher rises (sprite frame 0); the shot on
+        # frame 6: the staves fling open into the eight-armed star round the burst (sprite frame 1) and the
+        # bug jolts up; the staves fold shut and the bug settles by frame 16.
+        plan = {1: (0, 0, 0, 0, 0), 2: (-0.006, -0.4, 0.008, 1, 0), 4: (-0.016, -1.1, 0.026, 6, 0),
+                5: (-0.020, -1.5, 0.036, 12, 0), 6: (-0.020, -1.5, 0.040, 70, 0.8),
+                7: (0.012, 1.5, 0.025, 100, 1.15), 8: (0.004, 0.8, 0.025, 106, 0.6),
+                9: (0.0, 0.3, 0.030, 100, 0), 10: (0, 0, 0.030, 100, 0), 11: (0, 0, 0.028, 92, 0),
+                12: (0, 0, 0.024, 75, 0), 13: (0, 0, 0.018, 50, 0), 14: (0, 0, 0.011, 25, 0),
+                15: (0, 0, 0.004, 8, 0), 16: (0, 0, 0, 0, 0), 18: (0, 0, 0, 0, 0)}
+        for f, (dz, pitch, rise, opened, fs) in plan.items():
+            key_pose(c, rig, "body", f, rot_axis=NOSE_UP, angle=pitch, move=(0.0, 0.0, dz), pivot=(0.0, 0.05, 0.2))
+            key_pose(c, rig, "launcher", f, move=(0.0, 0.0, rise))
+            for k in range(8):
+                th = math.radians(45.0 * k)
+                # axis = the hanging stave's direction (down) x its outward radius: + swings the stave out
+                key_pose(c, rig, f"launcher.petal.{k}", f, rot_axis=(math.sin(th), -math.cos(th), 0.0), angle=opened)
+            s = S * fs if fs else 1.0
+            key_pose(c, rig, "launcher.flash", f, scale=(s, s, s))
+        for b in info["antennae"]:
+            for f, a in ((1, 0), (6, 0), (8, 10), (12, 0), (18, 0)):
+                key_pose(c, rig, b, f, rot_axis=NOSE_UP, angle=a)
+    else:
+        # frame: (body back (+Y), body squat, body pitch (nose up), head pitch, barrel recoil, antenna whip).
+        # Brace (frames 2-6: lowered, nose down, aiming); the shot on frame 6; the barrel slams 0.13 back into
+        # the breech by frame 7 (sprite frame 1: the grey line ~3 px shorter, held 300 ms) and runs out again
+        # by frame 17; the body rocks back and up on its planted legs and the antennae whip.
+        plan = {1: (0, 0, 0, 0, 0, 0), 2: (0, -0.005, -0.5, -0.6, 0, 0), 4: (0, -0.012, -1.2, -1.6, 0, 0),
+                5: (0, -0.015, -1.5, -2.0, 0, 0), 6: (0, -0.015, -1.5, -2.0, 0.0, 0),
+                7: (0.035, -0.006, 3.0, 3.0, 0.13, 10), 8: (0.040, -0.003, 3.5, 4.0, 0.13, 12),
+                9: (0.032, 0, 2.6, 2.5, 0.125, 8), 10: (0.022, 0, 1.6, 1.0, 0.11, 4),
+                11: (0.013, 0, 0.7, 0.0, 0.085, 0), 12: (0.006, 0, 0.2, 0, 0.06, 0), 13: (0.002, 0, 0, 0, 0.04, 0),
+                14: (0, 0, 0, 0, 0.022, 0), 15: (0, 0, 0, 0, 0.010, 0), 16: (0, 0, 0, 0, 0.003, 0),
+                17: (0, 0, 0, 0, 0, 0), 18: (0, 0, 0, 0, 0, 0)}
+        for f, (back, dz, pitch, hp, recoil, whip) in plan.items():
+            key_pose(c, rig, "body", f, rot_axis=NOSE_UP, angle=pitch, move=(0.0, back, dz), pivot=(0.0, 0.1, 0.2))
+            key_pose(c, rig, "head", f, rot_axis=NOSE_UP, angle=hp)
+            key_pose(c, rig, "barrel", f, move=(0.0, recoil, 0.0))
+            for b in info["antennae"]:
+                key_pose(c, rig, b, f, rot_axis=NOSE_UP, angle=whip)
+    return c.finish()
 
 
 # --------------------------------------------------------------------------------------------
@@ -882,10 +1089,19 @@ def build(variant: str, quick=False):
         shutil.copy(mask_path, os.path.join(QUICK_DIR, f"{variant}_marks.png"))
 
     mesh = body.join()
+    # UV unwrap now, with the muzzle flashes at full size (they get a proper patch of the texture), then
+    # shrink them to nothing around their bone's head: hidden at rest / in the bind pose, the attack clip
+    # scales the bone up by FLASH_SHRINK while the flash shows (finalize_unwrapped() does not re-unwrap)
+    if salib.REALISM:
+        salib.uv_unwrap(mesh)
+    for group, head in info.get("flashes", ()):
+        shrink_group(mesh, group, head, FLASH_SHRINK)
     for spec in specs:
         bones += leg_bones_beetle(spec, parent="body")
     bones += foot_bones(specs, info["toes"])      # after the IK targets they hang from
     rig = salib.build_armature("Rig", bones)
+    if info.get("rolls"):
+        align_rolls(rig, info["rolls"])
     salib.skin(mesh, rig)
     apply_leg_ik(rig, specs)
 
@@ -909,30 +1125,8 @@ def build(variant: str, quick=False):
             c.key("antenna.R", f, rot=(-ang * 2, 0, 0))
     clips.append(c.finish())
 
-    # attack.  Bone-local axes: body/head/gun/cannon bones point -Y, so local +Y = forward, local
-    # X rotation + = nose up; the launcher bone points up, so its local Y = up and local Z = backward.
-    c = new_clip(rig, "attack", 12, loop=False)
-    for spec in specs:
-        c.key(f"leg.{spec.name}.ik", 1, loc=(0, 0, 0))
-        c.key(f"leg.{spec.name}.ik", 12, loc=(0, 0, 0))
-    if kind == "ladybug":
-        # minigun: barrel rattles back, whole bug shivers, head dips a touch
-        for f in range(1, 13):
-            c.key("gun", f, loc=(0, -0.025 if f % 2 == 0 else 0.0, 0))
-            c.key("body", f, loc=(0.012 * (1 if f % 2 else -1) if f < 12 else 0.0, 0.0, 0.0))
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 3, rot=(-5, 0, 0)); c.key("head", 12, rot=(0, 0, 0))
-    elif kind == "shrapnel":
-        # launcher bursts: pops up and flares, bug squats then rebounds
-        c.key("launcher", 1, loc=(0, 0, 0), scale=(1, 1, 1))
-        c.key("launcher", 3, loc=(0, 0.05, 0), scale=(1.3, 0.85, 1.3))
-        c.key("launcher", 6, loc=(0, 0, 0), scale=(1, 1, 1))
-        c.key("body", 1, loc=(0, 0, 0)); c.key("body", 3, loc=(0, 0, -0.03)); c.key("body", 7, loc=(0, 0, 0.025)); c.key("body", 12, loc=(0, 0, 0))
-    else:
-        # cannon recoil along the barrel; the body rocks back on its legs, nose up
-        c.key("cannon", 1, loc=(0, 0, 0)); c.key("cannon", 3, loc=(0, -0.14, 0)); c.key("cannon", 12, loc=(0, 0, 0))
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("body", 3, loc=(0, -0.05, 0.02), rot=(5, 0, 0)); c.key("body", 12, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 4, rot=(4, 0, 0)); c.key("head", 12, rot=(0, 0, 0))
-    clips.append(c.finish())
+    # attack: each beetle's own weapon, after the original attack frames (key_attack)
+    clips.append(key_attack(kind, rig, specs, info))
 
     # death: the sprites' corpse - tipped onto one side, turned, shell on the ground, legs splayed
     c = new_clip(rig, "death", 36, loop=False)
@@ -945,14 +1139,17 @@ def build(variant: str, quick=False):
     clips.append(c.finish())
     salib.bake_actions(rig, clips)
     feet_report(variant, rig, mesh, specs, REPORT)
+    muzzle_report(variant, rig, info["muzzle"], MUZZLE_REPORT)
 
     if quick:
-        quick_renders(variant, rig, info["preview_radius"], info["preview_center"])
+        # no bake/export: the scene is saved for the crew's render scripts (qa/agents/beetle_attacks/tools)
+        os.makedirs(QUICK_DIR, exist_ok=True)
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(QUICK_DIR, f"{variant}_quick.blend"), compress=True)
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return None
-    path, s = salib.finalize_asset(variant, [rig, mesh], preview_radius=info["preview_radius"],
-                                   preview_center=info["preview_center"],
-                                   views=("front", "back", "left", "right", "threequarter", "top"))
+    path, s = finalize_unwrapped(variant, [rig, mesh], preview_radius=info["preview_radius"],
+                                 preview_center=info["preview_center"],
+                                 views=("front", "back", "left", "right", "threequarter", "top"))
     shutil.rmtree(tmp_dir, ignore_errors=True)
     assert sorted(a["name"] for a in s["animations"]) == ["attack", "death", "idle", "move"]
     assert "M_Team" in s["materials"]

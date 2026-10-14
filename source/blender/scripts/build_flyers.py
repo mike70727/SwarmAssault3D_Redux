@@ -24,8 +24,9 @@ Top-down silhouettes follow the in-game sprites (wings spread sideways, body a b
 Rig: root > body > {head > antennae, petiole > abdomen, wing bones, leg.<side><n>.up > .low, gun}.
 Wing beat = flap about the wing root's local X (up/down) + a fore/aft sweep about local Z so the
 silhouette changes from above like the three sprite frames (swept back / lateral / forward).
-Clips: idle (hover), fly (the game plays this for hovering and moving), attack (recoil), death
-(wings fold, legs curl, body rolls over; the game lowers the flyer to the ground meanwhile).
+Clips: idle (hover), fly (the game plays this for hovering and moving), attack (each wasp its own,
+after its original attack frames: see wasp_attack_clip; the neutrals keep a recoil), death (wings
+fold, legs curl, body rolls over; the game lowers the flyer to the ground meanwhile).
 
 Usage: blender -b --factory-startup --python build_flyers.py -- [--quick] asset...
   --quick: geometry + rig + clips only, EEVEE previews into qa/agents/wasps_flyers/quick (no bake,
@@ -51,6 +52,12 @@ from salib import BoneDef, Body, Clip  # noqa: E402
 
 QUICK_DIR = r"D:\SwarmAssault3D-complete\qa\agents\wasps_flyers\quick"
 
+# Size note (attack crew, 2026-10-13): measured on the raw Game.DDF frames (assault 70 px, paralysis and
+# sonic 56 px canvases; 24 px = 1 cell) the flight-frame body lengths are 39-40 / 29-30 / 31 px and the
+# spread wing spans 55-57 / ~37 / 48-50 px (the reference sheets enlarge the frames x3.31 for the assault
+# and x4.14 for the others, not x4).  The models built here are ~0.67x / ~1.38x / ~1.03x those sizes:
+# game model_scale 1.5 / 0.72 / 0.97 makes them match the sprites (reported to the lead; the geometry
+# below is unchanged).
 VARIANTS = {
     "wasp_assault": dict(kind="wasp", style="thread", weapon="gun", S=0.92),
     "wasp_paralysis": dict(kind="wasp", style="thread", weapon="arrow", S=1.22),
@@ -612,7 +619,9 @@ def build_wasp(body, cfg):
         body.cylinder("gun", K, P(0, -0.55, gz), 0.034, 0.40, rot=(rad(90), 0, 0), verts=10)  # launcher tube
         body.cube("gun", "M_Gun", P(0, -0.40, gz + 0.02), size=(0.10, 0.14, 0.08))
         body.cylinder("gun", "M_Gun", P(0, -0.71, gz), 0.044, 0.05, rot=(rad(90), 0, 0), verts=10)  # muzzle ring
-        body.sphere("gun", "M_Green", P(0, -0.77, gz), 0.055, segments=12, rings=8)  # glowing arrow tip under the head
+        # glowing arrow tip under the head, on its own bone (child of the launcher) so the attack
+        # clip can fire it (it vanishes: the game draws the flying arrow) and reload it from the tube
+        body.sphere("arrow", "M_Green", P(0, -0.77, gz), 0.055, segments=12, rings=8)
     else:  # ------------------------------------------------------------------- sonic wasp
         hy, hr = -0.47, 0.16
         body.sphere("head", T, P(0, hy, 0.03), hr, scale=(1.0, 0.85, 0.92), segments=12, rings=8)
@@ -667,6 +676,8 @@ def build_wasp(body, cfg):
                              mat_joint=leg_mats["joint"], toe=X(toe), mat_tarsus=leg_mats["tarsus"])
     bones += leg_bones
     bones.append(BoneDef("gun", g0, g1, parent="body"))
+    if weapon == "arrow":  # the arrow tip, pointing forward out of the launcher
+        bones.append(BoneDef("arrow", P(0, -0.74, gz), P(0, -0.84, gz), parent="gun"))
     extras = dict(head=(P(0, hy + 0.12, 0.0), P(0, hy - 0.16, 0.0)))
     return bones, wings, [b.name for b in leg_bones if b.name.endswith(".up")], extras
 
@@ -916,7 +927,7 @@ def key_legs(c, legs, frames, amp=4.0, beats=1):
             c.key(nm.replace(".up", ".low"), 1 + f, rot=(b, 0, 0))
 
 
-def make_clips(rig, kind, wings, legs, has_antennae, has_gun):
+def make_clips(rig, kind, wings, legs, has_antennae, has_gun, weapon=None):
     clips = []
     is_machine = kind == "machine"
     pb = rig.pose.bones
@@ -965,24 +976,11 @@ def make_clips(rig, kind, wings, legs, has_antennae, has_gun):
     if is_machine:
         c.key("pilot", 1, rot=(-5, 0, 0)); c.key("pilot", 13, rot=(-5, 0, 0))
     clips.append(c.finish())
-    # attack: recoil (backwards, nose up) while the wings keep beating ----------------------------
-    c = Clip(rig, "attack", 12, loop=False)
-    key_wings(c, wings, 12, fly_amp[0], fly_amp[1], tilt=fly_amp[2], beats=2, hind_lag=hind_lag)
-    key_legs(c, legs, 12, amp=leg_amp * 0.8)
-    rotor(c, 12, 1.0)
-    c.key("body", 1, loc=(0, 0, 0), rot=(pitch, 0, 0))
-    c.key("body", 3, loc=(0, -0.07, 0.025), rot=(pitch + 9, 0, 0))
-    c.key("body", 7, loc=(0, -0.02, 0.0), rot=(pitch + 2, 0, 0))
-    c.key("body", 13, loc=(0, 0, 0), rot=(pitch, 0, 0))
-    if "abdomen" in pb:
-        c.key("abdomen", 1, rot=(-3, 0, 0)); c.key("abdomen", 4, rot=(8, 0, 0)); c.key("abdomen", 13, rot=(-3, 0, 0))
-    if has_gun:
-        c.key("gun", 1, loc=(0, 0, 0)); c.key("gun", 2, loc=(0, -0.06, 0)); c.key("gun", 6, loc=(0, 0, 0)); c.key("gun", 13, loc=(0, 0, 0))
-    if "head" in pb:
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 3, rot=(10, 0, 0)); c.key("head", 13, rot=(0, 0, 0))
-    if is_machine:
-        c.key("pilot", 1, rot=(0, 0, 0)); c.key("pilot", 3, rot=(14, 0, 0)); c.key("pilot", 13, rot=(0, 0, 0))
-    clips.append(c.finish())
+    # attack ------------------------------------------------------------------------------------
+    if kind == "wasp":  # each wasp has its own attack, after its original attack frames
+        clips.append(wasp_attack_clip(rig, weapon, wings, legs, antennae, fly_amp, hind_lag, leg_amp * 0.8, pitch))
+    else:
+        clips.append(generic_attack_clip(rig, kind, wings, legs, has_gun, fly_amp, hind_lag, leg_amp, pitch, rotor))
     # death: wings fold, legs curl, body pitches down and rolls over while the game drops it --------
     c = Clip(rig, "death", 36, loop=False)
     for nm, _r, _t, s in wings:
@@ -1014,6 +1012,136 @@ def make_clips(rig, kind, wings, legs, has_antennae, has_gun):
         c.key(b, 1, rot=(0, 0, 0)); c.key(b, 36, rot=(-40, 0, 25 * (1 if i else -1)))
     clips.append(c.finish())
     return clips
+
+
+def generic_attack_clip(rig, kind, wings, legs, has_gun, fly_amp, hind_lag, leg_amp, pitch, rotor):
+    """The neutral flyers' attack (unchanged from the second shift): recoil (backwards, nose up)
+    while the wings keep beating."""
+    is_machine = kind == "machine"
+    pb = rig.pose.bones
+    c = Clip(rig, "attack", 12, loop=False)
+    key_wings(c, wings, 12, fly_amp[0], fly_amp[1], tilt=fly_amp[2], beats=2, hind_lag=hind_lag)
+    key_legs(c, legs, 12, amp=leg_amp * 0.8)
+    rotor(c, 12, 1.0)
+    c.key("body", 1, loc=(0, 0, 0), rot=(pitch, 0, 0))
+    c.key("body", 3, loc=(0, -0.07, 0.025), rot=(pitch + 9, 0, 0))
+    c.key("body", 7, loc=(0, -0.02, 0.0), rot=(pitch + 2, 0, 0))
+    c.key("body", 13, loc=(0, 0, 0), rot=(pitch, 0, 0))
+    if "abdomen" in pb:
+        c.key("abdomen", 1, rot=(-3, 0, 0)); c.key("abdomen", 4, rot=(8, 0, 0)); c.key("abdomen", 13, rot=(-3, 0, 0))
+    if has_gun:
+        c.key("gun", 1, loc=(0, 0, 0)); c.key("gun", 2, loc=(0, -0.06, 0)); c.key("gun", 6, loc=(0, 0, 0)); c.key("gun", 13, loc=(0, 0, 0))
+    if "head" in pb:
+        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 3, rot=(10, 0, 0)); c.key("head", 13, rot=(0, 0, 0))
+    if is_machine:
+        c.key("pilot", 1, rot=(0, 0, 0)); c.key("pilot", 3, rot=(14, 0, 0)); c.key("pilot", 13, rot=(0, 0, 0))
+    return c.finish()
+
+
+# --------------------------------------------------------------------------------------------
+# wasp attacks (attack crew, 2026-10-13).  The game restarts `attack` at every shot (blend in
+# 0.05 s), plays it at speed = clip length / attack_anim_time and releases the shot `fire_delay`
+# (0.04-0.05 s) after the start, i.e. at clip frame ~2; leaving the attack it blends to `fly` in
+# 0.15 s.  Original attack frames (Game.ANI UNWASPL?/UNWASPA?/UNWASSO?_AT<facing>, 2 frames each,
+# the second one carries the 'Fire Point' script):
+# * assault: frame 1 = the abdomen half way down, frame 2 (fire) = the abdomen swung down under
+#   the rear of the body (foreshortened from above, right behind the thorax, its shadow pulled in
+#   under the body); the two frames alternate while it fires = the abdomen pumps like a machine gun.
+# * paralysis: no body motion; frame 1 shows the green arrow tip in the launcher under the head,
+#   in frame 2 it is gone (fired).
+# * sonic: its attack frames ARE two of its flight frames (no pose of its own); the sonic arcs
+#   leave from in front of the head.
+# Rapid fire (assault 0.2 s, sonic 0.16 s): the clip starts and ends in the same firing pose with
+# the same wing phase (frames 1 and 12 equal, 2 whole wing beats in between), the kick inside, so
+# back-to-back restarts read as continuous fire.
+# --------------------------------------------------------------------------------------------
+# Assault abdomen chain poses: (petiole, abdomen) rotations in degrees about the bones' local X
+# (negative = tip down).  At rest the petiole rises ~50 deg backward and the abdomen is held up
+# behind (the "lollipop").  FIRE swings the petiole down to point back and down (-20 deg) and folds
+# the abdomen forward under the rear of the body, the sting pointing forward-down (~45 deg) between
+# the hind legs; from the sprite camera the abdomen then sits right behind the thorax like the
+# original's fire frame.  HALF is the original's first attack frame (half way down) and the
+# direction the abdomen recoils in.
+ASSAULT_FIRE = (-70.0, -77.0)
+ASSAULT_HALF = (-35.0, -40.0)
+
+
+def _key_abdomen(c, frame, k, fire=ASSAULT_FIRE, half=ASSAULT_HALF):
+    """Abdomen chain between FIRE (k = 0) and HALF (k = 1); k < 0 overshoots past FIRE."""
+    c.key("petiole", frame, rot=(fire[0] + (half[0] - fire[0]) * k, 0, 0))
+    c.key("abdomen", frame, rot=(fire[1] + (half[1] - fire[1]) * k, 0, 0))
+
+
+def wasp_attack_clip(rig, weapon, wings, legs, antennae, fly_amp, hind_lag, leg_amp, pitch):
+    c = Clip(rig, "attack", 12, loop=False)
+    # 2 whole wing beats and leg swings over frames 1..12 (the exported range): frame 12 = frame 1
+    key_wings(c, wings, 11, fly_amp[0], fly_amp[1], tilt=fly_amp[2], beats=2, hind_lag=hind_lag)
+    key_legs(c, legs, 11, amp=leg_amp)
+    for b in antennae:
+        c.key(b, 1, rot=(-8, 0, 0)); c.key(b, 12, rot=(-8, 0, 0))
+    if weapon == "gun":
+        # assault: the abdomen is already curled under at frame 1 (firing pose), the shot leaves at
+        # frame ~2, the abdomen kicks back toward the half-way pose (recoil) at 3-4, overshoots a
+        # little at 6 and is back in the firing pose from 8 to 12; the body jolts back with it.
+        _key_abdomen(c, 1, 0.0)
+        _key_abdomen(c, 2, 0.0)
+        _key_abdomen(c, 4, 0.42)
+        _key_abdomen(c, 6, -0.10)
+        _key_abdomen(c, 8, 0.0)
+        _key_abdomen(c, 12, 0.0)
+        c.key("body", 1, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("body", 2, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("body", 4, loc=(0, -0.035, 0.012), rot=(pitch + 3.0, 0, 0))
+        c.key("body", 7, loc=(0, 0.006, -0.004), rot=(pitch - 0.8, 0, 0))
+        c.key("body", 9, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("body", 12, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("head", 1, rot=(-2, 0, 0)); c.key("head", 4, rot=(1, 0, 0)); c.key("head", 8, rot=(-2, 0, 0))
+        c.key("head", 12, rot=(-2, 0, 0))
+    elif weapon == "arrow":
+        # paralysis: the green arrow tip sits in the launcher under the head; the wasp dips its head
+        # to aim (frame 2), the arrow leaves at frame ~2-3 (the tip vanishes: the game draws the
+        # flying arrow), launcher + body kick back, and a new arrow slides out of the tube (9-12).
+        c.key("body", 1, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("body", 2, loc=(0, 0.01, 0), rot=(pitch - 2.5, 0, 0))
+        c.key("body", 4, loc=(0, -0.05, 0.015), rot=(pitch + 5.0, 0, 0))
+        c.key("body", 7, loc=(0, -0.01, 0.0), rot=(pitch + 1.0, 0, 0))
+        c.key("body", 10, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("body", 12, loc=(0, 0, 0), rot=(pitch, 0, 0))
+        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 2, rot=(-6, 0, 0)); c.key("head", 5, rot=(3, 0, 0))
+        c.key("head", 9, rot=(0, 0, 0)); c.key("head", 12, rot=(0, 0, 0))
+        c.key("gun", 1, loc=(0, 0, 0)); c.key("gun", 2, loc=(0, 0, 0)); c.key("gun", 3, loc=(0, -0.07, 0))
+        c.key("gun", 6, loc=(0, -0.01, 0)); c.key("gun", 8, loc=(0, 0, 0)); c.key("gun", 12, loc=(0, 0, 0))
+        # the shot leaves at game time 0.067 s (first 30 Hz tick after fire_delay 0.04) = clip frame
+        # 2 at attack_anim_time 0.4 (speed 1): the tip is out (original frame 1) at 1, gone at 2
+        tiny = (0.02, 0.02, 0.02)
+        c.key("arrow", 1, loc=(0, 0.03, 0), scale=(1, 1, 1))
+        c.key("arrow", 2, loc=(0, 0.03, 0), scale=tiny)
+        c.key("arrow", 8, loc=(0, -0.10, 0), scale=tiny)
+        c.key("arrow", 9, loc=(0, -0.10, 0), scale=(0.45, 0.45, 0.45))
+        c.key("arrow", 12, loc=(0, 0, 0), scale=(1, 1, 1))
+        for f in (1, 12):
+            c.key("abdomen", f, rot=(-3, 0, 0))
+        c.key("abdomen", 4, rot=(4, 0, 0))
+    else:
+        # sonic: flight pose throughout (the original attack frames are flight frames); at the shot
+        # (frame ~2) the head throws forward and the black sonic bell under the face flares, the
+        # body shudders, all back to the flight pose by frame 8.
+        for f, ry in ((1, 0.0), (2, 0.0), (3, 1.2), (4, -1.0), (5, 0.6), (6, -0.3), (8, 0.0), (12, 0.0)):
+            c.key("body", f, loc=(0, -0.03 if f in (3, 4) else 0.0, 0), rot=(pitch + (2.0 if f == 3 else 0.0), ry, 0))
+        c.key("head", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("head", 2, loc=(0, 0, 0), rot=(0, 0, 0))
+        c.key("head", 3, loc=(0, 0.06, 0), rot=(-8, 0, 0)); c.key("head", 6, loc=(0, 0.0, 0), rot=(1, 0, 0))
+        c.key("head", 8, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("head", 12, loc=(0, 0, 0), rot=(0, 0, 0))
+        c.key("gun", 1, loc=(0, 0, 0), scale=(1, 1, 1)); c.key("gun", 2, loc=(0, 0, 0), scale=(1, 1, 1))
+        c.key("gun", 3, loc=(0, 0.05, 0), scale=(1.6, 1.25, 1.6))
+        c.key("gun", 5, loc=(0, 0.0, 0), scale=(0.9, 1.0, 0.9))
+        c.key("gun", 7, loc=(0, 0, 0), scale=(1, 1, 1)); c.key("gun", 12, loc=(0, 0, 0), scale=(1, 1, 1))
+        for f in (1, 12):
+            c.key("abdomen", f, rot=(-3, 0, 0))
+        c.key("abdomen", 3, rot=(3, 0, 0)); c.key("abdomen", 6, rot=(-4, 0, 0))
+        for i, b in enumerate(antennae):  # antennae flick back with the blast
+            s = 1 if i else -1
+            c.key(b, 3, rot=(14, 0, 6 * s)); c.key(b, 7, rot=(-8, 0, 0))
+    return c.finish()
 
 
 # --------------------------------------------------------------------------------------------
@@ -1139,7 +1267,8 @@ def build(variant: str, quick=False):
     missing = [vg.name for vg in mesh.vertex_groups if vg.name not in bone_names]
     assert not missing, f"vertex groups without bones: {missing}"
 
-    clips = make_clips(rig, kind, wings, legs, has_antennae="antenna.L" in bone_names, has_gun="gun" in bone_names)
+    clips = make_clips(rig, kind, wings, legs, has_antennae="antenna.L" in bone_names, has_gun="gun" in bone_names,
+                       weapon=cfg.get("weapon"))
     salib.bake_actions(rig, clips)
 
     if quick:

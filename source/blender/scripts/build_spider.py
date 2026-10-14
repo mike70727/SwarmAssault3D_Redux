@@ -29,6 +29,29 @@ the motion is local:
   (a clip starting at Blender frame 1 starts at t = 1/30 s and the game holds that pose once per loop).
 Foot / knee heights and the walk's ground slide were checked on the exported GLBs
 (qa/agents/spiders/s2/glb_feet_check.py).
+
+Attack clips (attack crew, 2026-10-13) - each reproduces the original attack frames of Game.ANI
+(UNSPI??Y_AT<facing>: two frames per facing, measured in qa/agents/spider_attacks):
+* Black Widow (frames 150 ms + 150 ms, `Damage` on the second): melee bite.  Against the stand frame the
+  attack frames crouch the body, push it toward the target and stretch the front legs ~0.25 cells further
+  forward along the ground; the second frame goes furthest.  The clip (frames 0..12) starts and ends in an
+  attack stance (body low and forward, fangs half open, palps up) so the game's restart at every bite
+  reads as continuous biting: legs I reach forward in a low arc while the fangs spread (frame 3), strike at
+  frame 5 (0.17 s; the game deals the bite at fire_delay 0.15 s) - the body lunges, legs I plant 0.29
+  cells ahead, the fangs close like a pincer - hold to 8, legs I step back.  Feet that are down never slide;
+  every foot is on its idle spot at the first and last frame (between bites the game shows idle for a
+  tick or more, and feet planted elsewhere would shuffle at every restart); II, III and IV stay planted.
+* Sniper (100 ms + 100 ms, `Fire Point`): the body does not move in the original; a pale yellow-white
+  flash lights up on top of the carapace, dim on the first frame, bright on the second.  The clip
+  (frames 0..15) shows that flash (`flash` bone, emissive M_Flash) peaking at frame 3 = 0.1 s = the shot,
+  with only a slight recoil.
+* Missile (100 ms + 100 ms, `Fire Point`): the body does not move either; the flash is a back-blast at the
+  rear of the launcher box (small on the first frame, a bright core with a tan smoke plume on the second)
+  while the rocket leaves at the front (Game.ANI's launch point).  The launcher's two tubes therefore run along the body axis: rockets leave
+  the front mouths (the muzzle), the back-blast (`flash` + `plume` bones, emissive M_Flash / M_Blast)
+  bursts from the rear mouths at frame 3 = 0.1 s = the launch (fire_delay 0.08 -> tick 3), the box kicks.
+The flash parts are scaled to FLASH_HIDDEN in every frame of every other clip (the game only animates what a
+clip keys, so an unkeyed flash would keep its rest size).
 """
 import math
 import os
@@ -96,6 +119,66 @@ def leg_specs(kind):
         specs.append(LegSpec(name, +1, r, k, f, phase=phase, radius=lay["leg_r"]))
         specs.append(LegSpec("R" + name[1:], -1, m(r), m(k), m(f), phase=(phase + 0.5) % 1.0, radius=lay["leg_r"]))
     return specs
+
+
+# ----------------------------------------------------------------------------------------------
+# attack: muzzle flashes and timing
+# ----------------------------------------------------------------------------------------------
+# Flash parts are scaled to this outside their moment (0 would give degenerate bone matrices).
+FLASH_HIDDEN = 0.01
+# Sniper: centre of the carapace flash.  Game.ANI's flash pixels (attack frame 2, all 8 facings) sit
+# 0.18-0.19 cells ahead of the unit centre, on the centre line, on top of the carapace.
+SNIPER_FLASH = (0.0, -0.20, 0.462)
+# per-frame flash scale (30 fps; the game plays the clip over attack_anim_time 0.5 s = 15 frames): dim
+# glow on the original's first attack frame (0-0.1 s), full flash on the second (0.1-0.2 s, the shot)
+SNIPER_FLASH_SCALE = [0.01, 0.35, 0.5, 1.0, 0.95, 0.85, 0.55, 0.01]
+# Missile back-blast: core flash and plume (x, y, z scale; y = backward along the plume) per frame
+# (the original: a small bright flash at the rear of the launcher on attack frame 1, flash plus a tan smoke
+# plume on frame 2; here the core leads and the smoke lingers a little longer)
+MISSILE_FLASH_SCALE = [0.01, 0.55, 0.75, 1.0, 0.85, 0.55, 0.25, 0.01]
+MISSILE_PLUME_SCALE = [(0.01, 0.01), (0.3, 0.2), (0.6, 0.45), (0.9, 0.85), (1.05, 1.1), (1.05, 1.25),
+                       (0.85, 1.2), (0.55, 1.0), (0.25, 0.7), (0.01, 0.01)]
+# missile launcher tubes (x offset of each tube, height of the tube axis, radius) and the plume length
+TUBE_DX, TUBE_Z, TUBE_R = 0.088, 0.585, 0.045
+PLUME_LEN = 0.38
+
+
+def flash_bones(kind):
+    return {"sniper": ["flash"], "missile": ["flash", "plume"]}.get(kind, [])
+
+
+def key_flash_hidden(clip, kind, frames):
+    for b in flash_bones(kind):
+        for f in frames:
+            clip.key(b, f, scale=(FLASH_HIDDEN,) * 3)
+
+
+def ease_keys(keys, f):
+    """Value at frame f of (frame, tuple) keys: smoothstep between neighbouring keys, held outside.
+    Equal neighbouring keys give an exactly constant stretch (a planted foot)."""
+    if f <= keys[0][0]:
+        return keys[0][1]
+    for (f0, v0), (f1, v1) in zip(keys, keys[1:]):
+        if f0 <= f <= f1:
+            t = (f - f0) / (f1 - f0)
+            t = t * t * (3.0 - 2.0 * t)
+            return tuple(a + (b - a) * t for a, b in zip(v0, v1))
+    return keys[-1][1]
+
+
+def muzzle_flash(body, bone, mat, center, size, spikes):
+    """Star-shaped flash: a small core sphere plus tapered spikes.  `spikes` = [(direction, length factor)];
+    lengths are multiples of `size`, the core radius is 0.32 * size."""
+    c = Vector(center)
+    core = body.sphere(bone, mat, tuple(c), size * 0.32, segments=10, rings=6)
+    core["sa_no_subdiv"] = True
+    for d, k in spikes:
+        d = Vector(d).normalized()
+        length = size * k
+        rot = d.to_track_quat("Z", "Y").to_euler()
+        sp = body.cone(bone, mat, tuple(c + d * length * 0.5), size * 0.16, 0.0, length, rot=rot, verts=5)
+        sp["sa_no_subdiv"] = True
+    return core
 
 
 # ----------------------------------------------------------------------------------------------
@@ -617,6 +700,115 @@ def key_feet_rest(clip: Clip, specs, frames):
         clip.key(f"leg.{spec.name}.ik", frames, loc=(0, 0, 0))
 
 
+def key_feet_track(clip: Clip, rig, specs, first, last, track):
+    """Key every foot on every frame first..last; track(spec, frame) -> armature-space offset."""
+    for spec in specs:
+        for f in range(first, last + 1):
+            key_foot(clip, rig, spec, f, track(spec, f))
+
+
+def key_scale_frames(clip: Clip, bone, values, last):
+    """Per-frame scale keys from frame 0 (a number = uniform, a pair = (across, along the bone)); held after
+    the list ends, up to `last`."""
+    for f in range(0, last + 1):
+        v = values[min(f, len(values) - 1)]
+        s = (v, v, v) if not isinstance(v, tuple) else (v[0], v[1], v[0])
+        clip.key(bone, f, scale=s)
+
+
+def finish_from_zero(clip: Clip, last):
+    """Finish a clip keyed on frames 0..last: the exported clip then starts at t = 0 (the game restarts
+    `attack` at every shot; a first key at 1/30 s would hold the first pose for a frame each time)."""
+    act = clip.finish()
+    act.frame_range = (0, last)
+    return act
+
+
+# widow: armature-space foot offsets (x outward, y = -forward, z up) of legs I over the bite: a low reach
+# along the ground to 0.29 cells ahead of the idle foot (the original's attack frames draw the front legs
+# 0.2 / 0.28 cells further forward, at ground level), held there through the bite, and back.  The clip's
+# first and last frames keep every foot on its idle spot: the game shows idle for a tick or more between
+# bites, and feet planted elsewhere would shuffle back and forth at every restart.
+WIDOW_LEG1 = [(0, (0.0, 0.0, 0.0)), (1, (0.008, -0.05, 0.05)), (2, (0.015, -0.12, 0.08)), (3, (0.02, -0.19, 0.08)),
+              (4, (0.024, -0.25, 0.05)), (5, (0.025, -0.29, 0.0)), (8, (0.025, -0.29, 0.0)), (9, (0.022, -0.25, 0.05)),
+              (10, (0.016, -0.16, 0.07)), (11, (0.006, -0.06, 0.05)), (12, (0.0, 0.0, 0.0))]
+
+
+def widow_attack(rig, specs, n=12):
+    """Melee bite, frames 0..n (n = 12 -> 0.4 s = attack_anim_time; the game stretches it to that time).
+    Starts and ends in the attack stance (body low and pushed toward the target, fangs half open, palps
+    up; feet on their idle spots); legs I reach forward, fangs spread wide (3), strike at 5: the body lunges
+    another 0.07 cells, legs I plant 0.29 ahead, the fangs close; hold to 8, back to the stance by 12."""
+    c = Clip(rig, "attack", n, loop=False)
+    # body bone: loc (0, forward, up), rot X = pitch (+ = nose up).  The original's attack frames both show
+    # the body pushed forward and low; the second (the bite) a little more
+    for f, fw, up, pitch in [(0, 0.06, -0.045, -2), (3, 0.075, -0.05, 0), (5, 0.13, -0.07, -5),
+                             (7, 0.12, -0.065, -4), (10, 0.075, -0.05, -2.5), (n, 0.06, -0.045, -2)]:
+        c.key("body", f, loc=(0, fw, up), rot=(pitch, 0, 0))
+    # head (eyes, chelicerae, palps): +X pitches it down; raised a little to open the jaws, level for the
+    # strike (pitched down onto the prey, the fangs went 0.13 cells into the ground)
+    for f, a in [(0, 0), (3, -6), (5, 0), (7, 0), (10, -1), (n, 0)]:
+        c.key("head", f, rot=(a, 0, 0))
+    # abdomen (+X = rear up): kept from swinging up when the front dips
+    for f, a in [(0, -2), (3, 0), (5, -4), (7, -3), (10, -2), (n, -2)]:
+        c.key("abdomen", f, rot=(a, 0, 0))
+    # fangs: -X swings the tips forward and up (open), Z spreads them (+az) or closes them (-az).  Half open
+    # in the stance, spread wide at 3, swung down onto the prey and closed like a pincer at the strike (they
+    # stay ahead of the head: from their rest angle they would reach under the ground)
+    for sgn, b in ((1, "fang.L"), (-1, "fang.R")):
+        for f, ax, az in [(0, -28, 10), (3, -48, 24), (5, -36, -8), (7, -34, -6), (10, -30, 5), (n, -28, 10)]:
+            c.key(b, f, rot=(ax, 0, -sgn * az))
+    # pedipalps: raised in the stance and before the strike, down onto the prey at the strike
+    for sgn, b in ((1, "palp.L"), (-1, "palp.R")):
+        for f, ax, az in [(0, 15, 5), (3, 25, 9), (5, 6, -2), (8, 8, 0), (n, 15, 5)]:
+            c.key(b, f, rot=(ax, 0, sgn * az))
+
+    def track(spec, f):
+        if spec.name[1] == "1":
+            x, y, z = ease_keys(WIDOW_LEG1, f)
+            return (x * spec.side, y, z)
+        return (0.0, 0.0, 0.0)
+
+    key_feet_track(c, rig, specs, 0, n, track)
+    act = finish_from_zero(c, n)
+    leg_report("spider_black_widow attack", solve_legs(rig, specs, 0, n))
+    return act
+
+
+def sniper_attack(rig, specs, n=15):
+    """Carapace flash, frames 0..n (n = 15 -> 0.5 s = attack_anim_time).  The original's body does not
+    move: the flash (dim, then bright at 0.1 s = the shot) is the attack; a slight recoil."""
+    c = Clip(rig, "attack", n, loop=False)
+    key_feet_track(c, rig, specs, 0, n, lambda spec, f: (0.0, 0.0, 0.0))
+    for f, fw, up, pitch in [(0, 0, 0, 0), (3, -0.012, 0.004, 1.5), (6, -0.004, 0.001, 0.5), (9, 0, 0, 0), (n, 0, 0, 0)]:
+        c.key("body", f, loc=(0, fw, up), rot=(pitch, 0, 0))
+    for f, a in [(0, 0), (4, -2.5), (10, 0), (n, 0)]:
+        c.key("abdomen", f, rot=(a, 0, 0))
+    for sgn, b in ((1, "palp.L"), (-1, "palp.R")):
+        c.key(b, 0, rot=(0, 0, 0)); c.key(b, 3, rot=(6, 0, 3 * sgn)); c.key(b, 9, rot=(0, 0, 0)); c.key(b, n, rot=(0, 0, 0))
+    key_scale_frames(c, "flash", SNIPER_FLASH_SCALE, n)
+    act = finish_from_zero(c, n)
+    leg_report("spider_sniper attack", solve_legs(rig, specs, 0, n))
+    return act
+
+
+def missile_attack(rig, specs, n=15):
+    """Back-blast, frames 0..n (n = 15 -> 0.5 s).  The original's body does not move; the launcher kicks a
+    little, the back-blast bursts from the rear mouths at 0.1 s (the launch) and fades."""
+    c = Clip(rig, "attack", n, loop=False)
+    key_feet_track(c, rig, specs, 0, n, lambda spec, f: (0.0, 0.0, 0.0))
+    # gun bone: local Z = forward, Y = up; X rotation tilts the top forward (+) / back (-)
+    for f, back, rx in [(0, 0.0, 0.0), (3, 0.018, -2.5), (5, 0.012, -1.5), (9, 0.0, 0.0), (n, 0.0, 0.0)]:
+        c.key("gun", f, loc=(0, 0, -back), rot=(rx, 0, 0))
+    for f, up in [(0, 0.0), (3, -0.008), (7, 0.0), (n, 0.0)]:
+        c.key("body", f, loc=(0, 0, up), rot=(0, 0, 0))
+    key_scale_frames(c, "flash", MISSILE_FLASH_SCALE, n)
+    key_scale_frames(c, "plume", MISSILE_PLUME_SCALE, n)
+    act = finish_from_zero(c, n)
+    leg_report("spider_missile attack", solve_legs(rig, specs, 0, n))
+    return act
+
+
 # ----------------------------------------------------------------------------------------------
 # the three spiders
 # ----------------------------------------------------------------------------------------------
@@ -646,6 +838,15 @@ def build(variant: str):
     # kind forces metallic >= 0.8, and the game has no environment map, so a metal box renders dark grey
     mats["M_Launcher"] = salib.material("M_Launcher", (0.80, 0.78, 0.71), roughness=0.45, metallic=0.1, kind="chitin",
                                         variation=0.12, coat=0.2, bump=0.06, dirt=0.35)
+    # attack flashes (shown only at the shot, see FLASH_HIDDEN): the sprites' flash pixels are pale yellow
+    # (248, 247, 161) with yellow-orange edges (243, 210, 120); the missile's back-blast plume is tan smoke
+    # (212, 168, 123 .. 133, 116, 90).  The game adds emissive straight to the lit colour (no exposure
+    # scaling) before ACES tonemapping, which pushes bright near-neutral colours to white (a first build
+    # with emission (1, 0.95, 0.55) x 1.5 read (242, 241, 229) in game): blue kept low so it stays pale yellow.
+    mats["M_Flash"] = salib.material("M_Flash", (0.95, 0.92, 0.42), roughness=0.4, kind="emissive",
+                                     emission=(1.0, 0.97, 0.33), emission_strength=2.2)
+    mats["M_Blast"] = salib.material("M_Blast", (0.56, 0.45, 0.34), roughness=0.95, kind="emissive",
+                                     emission=(0.62, 0.46, 0.30), emission_strength=0.18)
     # salib's "fur" kind adds a white Sheen lobe; Cycles folds it into the diffuse-colour bake and the
     # brown comes out grey - keep the fur grain/bump but drop the sheen on the baked surfaces.
     for mname in ("M_Team", "M_Brown", "M_BrownLeg"):
@@ -738,6 +939,11 @@ def build(variant: str):
         # sticks out past the head in any frame); the attack frames flash on the middle of the carapace,
         # so the sniper fires from its body.  (The first automated pass and the previous rebuild had put
         # a scoped rifle along the back with the barrel reaching 0.4 cells past the fangs.)
+        # The flash itself: a small star on top of the carapace, hidden except at the shot (the sprite's
+        # flash is ~3 x 4 px of a 39 px spider, ~0.15 cells; a first build at 0.085 read as a speck in game)
+        muzzle_flash(body, "flash", "M_Flash", SNIPER_FLASH, 0.125,
+                     [((0, -1, 0.35), 1.0), ((0.75, -0.6, 0.3), 0.7), ((-0.75, -0.6, 0.3), 0.7), ((0, -0.25, 1), 0.65),
+                      ((1, 0.15, 0.35), 0.55), ((-1, 0.15, 0.35), 0.55), ((0, 1, 0.5), 0.4)])
         preview_radius = 3.0
     else:  # missile
         body_mat, leg_mat = T, "M_MissileLeg"
@@ -745,23 +951,44 @@ def build(variant: str):
         roughen(ball, 0.010, 0.08)
         ab = hi_sphere(body, "abdomen", T, (0, CY + 0.54, 0.36), 0.22, scale=(1.0, 1.4, 0.75), segments=28, rings=18)
         roughen(ab, 0.010, 0.08)
-        # light-grey box launcher on the abdomen, rear-top edge chamfered, two big dark missile tubes
-        # (the sprite shows two dark squares on the box, the portrait two openings on its rear face)
+        # light-grey box launcher on the abdomen, rear-top edge chamfered.  Two launch tubes run along the
+        # body axis: the rockets leave the front mouths, the back-blast bursts from the rear mouths (the
+        # original attack frames flash at the rear end of the box in every facing while Game.ANI's launch
+        # point is at the front; the sprite and the portrait show two dark openings on the box)
         bsz = (0.36, 0.42, 0.22)
         bc = (0, CY + 0.54, 0.585)
-        body.chamfered_box("gun", "M_Launcher", bc, bsz, chamfer=0.13)
-        nrm = Vector((0, 1, 1)).normalized()
-        face_c = Vector((0, bc[1] + bsz[1] / 2 - 0.065, bc[2] + bsz[2] / 2 - 0.065))
+        body.chamfered_box("gun", "M_Launcher", bc, bsz, chamfer=0.06)
+        y_front, y_rear = bc[1] - bsz[1] / 2, bc[1] + bsz[1] / 2
         for sx in (-1, 1):
-            p = face_c + Vector((sx * 0.085, 0, 0)) + nrm * 0.012
-            t = body.cylinder("gun", "M_Black", tuple(p), 0.052, 0.07, rot=(math.radians(-45), 0, 0), verts=14)
-            t["sa_no_subdiv"] = True
-            rim = body.cylinder("gun", "M_Gun", tuple(p - nrm * 0.02), 0.062, 0.025, rot=(math.radians(-45), 0, 0), verts=14)
-            rim["sa_no_subdiv"] = True
+            for y_face, sgn in ((y_front, -1), (y_rear, +1)):
+                rim = body.cylinder("gun", "M_Gun", (sx * TUBE_DX, y_face + sgn * 0.010, TUBE_Z), TUBE_R + 0.013, 0.02,
+                                    rot=(math.radians(90), 0, 0), verts=14)
+                rim["sa_no_subdiv"] = True
+                mouth = body.cylinder("gun", "M_Black", (sx * TUBE_DX, y_face + sgn * 0.0135, TUBE_Z), TUBE_R, 0.017,
+                                      rot=(math.radians(90), 0, 0), verts=14)
+                mouth["sa_no_subdiv"] = True
         for sx in (-1, 1):   # side rails
             body.cube("gun", "M_Gun", (sx * 0.185, CY + 0.52, 0.53), size=(0.02, 0.32, 0.03))
-        body.cube("gun", "M_Gun", (0, CY + 0.33, 0.57), size=(0.16, 0.02, 0.11))            # front panel
         body.cube("gun", "M_Gun", (0, CY + 0.52, 0.70), size=(0.10, 0.16, 0.02))            # top plate
+        # back-blast: a star-shaped core flash between the rear mouths and an orange plume trailing back
+        blast_c = (0.0, y_rear + 0.04, TUBE_Z)
+        muzzle_flash(body, "flash", "M_Flash", blast_c, 0.15,
+                     [((0, 1, 0), 1.0), ((0.6, 0.8, 0.1), 0.75), ((-0.6, 0.8, 0.1), 0.75), ((0, 0.7, 0.7), 0.7),
+                      ((0, 0.75, -0.55), 0.55), ((1, 0.2, 0), 0.5), ((-1, 0.2, 0), 0.5)])
+
+        def plume_profile(s):
+            pts = [(0.0, 0.0), (0.1, 0.5), (0.3, 0.9), (0.5, 1.0), (0.75, 0.75), (1.0, 0.0)]
+            for (s0, r0), (s1, r1) in zip(pts, pts[1:]):
+                if s0 <= s <= s1:
+                    t = (s - s0) / (s1 - s0)
+                    return r0 + (r1 - r0) * t * t * (3 - 2 * t)
+            return 0.0
+
+        # the smoke starts behind the core flash so the bright core stays visible
+        pl = body.lathe("plume", "M_Blast", (0.0, y_rear + 0.07 + PLUME_LEN / 2, TUBE_Z), PLUME_LEN, 0.10,
+                        plume_profile, around=12, along=8, zscale=0.85)
+        pl["sa_no_subdiv"] = True
+        muzzle_pos = (0.0, y_front - 0.022, TUBE_Z)      # between the two front mouths (tubes at x = +-TUBE_DX)
         for s in (+1, -1):
             fb = "fang.L" if s > 0 else "fang.R"
             base = Vector((s * 0.06, CY - 0.19, CZ - 0.08))
@@ -787,6 +1014,11 @@ def build(variant: str):
     tris = tri_count(mesh)
     salib.log(f"{variant}: {tris} triangles")
     assert tris < 8000, f"{variant} over budget: {tris} triangles"
+    # where the shot leaves, in the units.ron `muzzle` convention (x to the unit's right, y up, z ahead;
+    # the model faces -Y, so its right is -X)
+    muzzle = {"sniper": SNIPER_FLASH, "missile": locals().get("muzzle_pos")}.get(kind)
+    if muzzle is not None:
+        salib.log(f"{variant}: muzzle (x right, y up, z ahead) = ({-muzzle[0]:.2f}, {muzzle[2]:.2f}, {-muzzle[1]:.2f})")
 
     # ---- rig --------------------------------------------------------------------------------
     bones = [
@@ -801,6 +1033,11 @@ def build(variant: str):
     ]
     if kind == "missile":
         bones.append(BoneDef("gun", (0, CY + 0.54, 0.48), (0, CY + 0.54, 0.72), parent="abdomen"))
+        # back-blast parts scale about the rear mouths; the plume bone points backward (its local Y)
+        bones.append(BoneDef("flash", blast_c, (blast_c[0], blast_c[1] + 0.1, blast_c[2]), parent="gun"))
+        bones.append(BoneDef("plume", (0.0, y_rear + 0.02, TUBE_Z), (0.0, y_rear + 0.12, TUBE_Z), parent="gun"))
+    if kind == "sniper":
+        bones.append(BoneDef("flash", SNIPER_FLASH, (SNIPER_FLASH[0], SNIPER_FLASH[1] - 0.1, SNIPER_FLASH[2]), parent="body"))
     for spec in specs:
         bones += salib.leg_bones(spec, parent="body")
     rig = salib.build_armature("Rig", bones)
@@ -819,6 +1056,7 @@ def build(variant: str):
         c.key(b, 1, rot=(0, 0, 0)); c.key(b, 12, rot=(10, 0, 6 * sgn)); c.key(b, 28, rot=(-6, 0, -4 * sgn)); c.key(b, 40, rot=(0, 0, 0))
     for sgn, b in ((1, "fang.L"), (-1, "fang.R")):
         c.key(b, 1, rot=(0, 0, 0)); c.key(b, 20, rot=(0, 0, 6 * sgn)); c.key(b, 40, rot=(0, 0, 0))
+    key_flash_hidden(c, kind, (1, 40))
     act = c.finish()
     leg_report(f"{variant} idle", solve_legs(rig, specs, 1, 40))
     clips.append(act)
@@ -831,43 +1069,25 @@ def build(variant: str):
     key_walk(c, rig, specs, move_frames, stride=slide_free_stride(move_frames), lift=lift, body_bob=0.012, first=0)
     for sgn, b in ((1, "palp.L"), (-1, "palp.R")):
         c.key(b, 0, rot=(0, 0, 0)); c.key(b, move_frames // 2, rot=(12, 0, 0)); c.key(b, move_frames, rot=(0, 0, 0))
+    key_flash_hidden(c, kind, (0, move_frames))
     act = c.finish()
     act.frame_range = (0, move_frames)
     leg_report(f"{variant} move", solve_legs(rig, specs, 0, move_frames))
     clips.append(act)
 
-    c = Clip(rig, "attack", 12, loop=False)
-    key_feet_rest(c, specs, 12)
-    if kind == "widow":
-        # rear up, lunge forward and bite: fangs spread then stab down; the front legs rise
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("body", 4, loc=(0, -0.04, 0.05), rot=(16, 0, 0))
-        c.key("body", 7, loc=(0, 0.12, -0.02), rot=(-4, 0, 0)); c.key("body", 12, loc=(0, 0, 0), rot=(0, 0, 0))
-        for sgn, b in ((1, "fang.L"), (-1, "fang.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 4, rot=(-35, 0, 28 * sgn)); c.key(b, 7, rot=(25, 0, -8 * sgn)); c.key(b, 12, rot=(0, 0, 0))
-        for sgn, b in ((1, "palp.L"), (-1, "palp.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 4, rot=(30, 0, 20 * sgn)); c.key(b, 12, rot=(0, 0, 0))
-        for name in ("L1", "R1"):
-            spec = next(s for s in specs if s.name == name)
-            key_foot(c, rig, spec, 1, (0, 0, 0)); key_foot(c, rig, spec, 4, (0.08 * spec.side, -0.05, 0.42))
-            key_foot(c, rig, spec, 8, (0, -0.10, 0.0)); key_foot(c, rig, spec, 12, (0, 0, 0))
-    elif kind == "sniper":
-        # the shot leaves the carapace (the sprite's flash): the body kicks back and up (body bone points
-        # -Y, so local -Y is backward and +X pitch lifts the front), the abdomen and the palps follow
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("body", 2, loc=(0, -0.05, 0.015), rot=(7, 0, 0))
-        c.key("body", 5, loc=(0, -0.02, 0.005), rot=(2, 0, 0)); c.key("body", 10, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("abdomen", 1, rot=(0, 0, 0)); c.key("abdomen", 3, rot=(-5, 0, 0)); c.key("abdomen", 10, rot=(0, 0, 0))
-        for sgn, b in ((1, "palp.L"), (-1, "palp.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 3, rot=(14, 0, 8 * sgn)); c.key(b, 10, rot=(0, 0, 0))
-    else:
-        # launcher kicks, the whole spider squats under the launch
-        c.key("gun", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("gun", 2, loc=(0, -0.02, 0.0), rot=(-8, 0, 0)); c.key("gun", 8, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0)); c.key("body", 3, loc=(0, 0, -0.05), rot=(-5, 0, 0)); c.key("body", 10, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("abdomen", 1, rot=(0, 0, 0)); c.key("abdomen", 3, rot=(6, 0, 0)); c.key("abdomen", 10, rot=(0, 0, 0))
-    act = c.finish()
-    leg_report(f"{variant} attack", solve_legs(rig, specs, 1, 12))
+    # attack: the original's attack frames, see the module docstring and widow/sniper/missile_attack()
+    act = {"widow": widow_attack, "sniper": sniper_attack, "missile": missile_attack}[kind](rig, specs)
     clips.append(act)
 
     c = Clip(rig, "death", 36, loop=False)
+    # channels a clip does not key are baked from the pose the previous clip (attack) ended in: key the head
+    # and the palps at rest and the flashes hidden
+    c.key("head", 1, rot=(0, 0, 0))
+    for b in ("palp.L", "palp.R"):
+        c.key(b, 1, rot=(0, 0, 0))
+    if kind == "missile":
+        c.key("gun", 1, loc=(0, 0, 0), rot=(0, 0, 0))
+    key_flash_hidden(c, kind, (1, 36))
     # the body jerks up, then drops onto the ground and rolls part way onto its side while the legs go
     # limp and splay around it (below).  The drop puts the belly of the cephalothorax on the ground (its
     # underside is CZ - half its height above the ground at rest); the compact sniper / missile roll
