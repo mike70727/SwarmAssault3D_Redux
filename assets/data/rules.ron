@@ -9,6 +9,10 @@
         replan_interval: 0.6,
         stuck_time: 0.8,
         separation_strength: 6.0,
+        // the original rests 2 s after each bug (FUN_00414d90) and breeds one family faster per team
+        // colour (its breeding table at 0x47bb28): yellow wasps, red spiders, green ants, blue beetles
+        breed_pause: 2.0,
+        breeding_specialities: [("Y", Wasp), ("R", Spider), ("G", Ant), ("B", Beetle)],
         source: "tick/caps/timers are assumptions (docs/GAMEPLAY_RESEARCH.md A3, A9, A11); bit radius from OpenSA",
     ),
 )

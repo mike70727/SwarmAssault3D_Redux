@@ -252,131 +252,131 @@
     units: {
         // ---------------------------------------------------------------- ants
         "ant_soldier": (
-            name: "Ant Soldier", family: Ant, role: Light, hp: 100.0, speed: 2.56, turn_rate: 540.0, radius: 0.38,
-            scan_range: 6.0, build_time: 5.0, weapon: Some("ant_bite"), melee: true, aggressive: true,
+            name: "Ant Soldier", family: Ant, role: Light, hp: 100.0, speed: 2.5, turn_rate: 540.0, radius: 0.38,
+            scan_range: 6.0, build_time: 4.0, build_time_speciality: 3.0, weapon: Some("ant_bite"), melee: true, aggressive: true,
             // 0.45: the bite clip fills the 0.5 s bite cycle, so the biting reads as continuous (ant crew)
             model: "ant_soldier", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
-            source: "opensa ants_light: HP 5300, Speed 105, BuildDuration 125, ScanRadius 6, stance AttackAnything; ORIGINAL VALUES: health 100 (FUN_00402890 / FUN_00402e90)",
+            source: "opensa ants_light: HP 5300, Speed 105, BuildDuration 125, ScanRadius 6, stance AttackAnything; ORIGINAL VALUES: health 100 (FUN_00402890 / FUN_00402e90); ORIGINAL (2026-10-14): speed 60 px/s, breeds in 4 s (3 s for its speciality colour)",
         ),
         "ant_grenadier": (
-            name: "Ant Grenadier", family: Ant, role: Medium, hp: 80.0, speed: 2.25, turn_rate: 540.0, radius: 0.38,
-            scan_range: 6.0, build_time: 8.0, weapon: Some("ant_grenade"), aggressive: false,
+            name: "Ant Grenadier", family: Ant, role: Medium, hp: 80.0, speed: 2.0833, turn_rate: 540.0, radius: 0.38,
+            scan_range: 6.0, build_time: 8.0, build_time_speciality: 6.0, weapon: Some("ant_grenade"), aggressive: false,
             model: "ant_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
             // the grenade in the raised right foreleg at release (ant crew, measured on the GLB)
             muzzle: Some((0.32, 0.70, 0.38)),
-            source: "opensa ants_medium: HP 4400, Speed 92, BuildDuration 200, FireDelay 10; ORIGINAL VALUES: health 80 (FUN_00401c50 / FUN_00402230)",
+            source: "opensa ants_medium: HP 4400, Speed 92, BuildDuration 200, FireDelay 10; ORIGINAL VALUES: health 80 (FUN_00401c50 / FUN_00402230); ORIGINAL (2026-10-14): speed 50 px/s, breeds in 8 s (6 s for its speciality colour)",
         ),
         "ant_bazooka": (
-            name: "Ant Bazooka", family: Ant, role: Heavy, hp: 140.0, speed: 1.9, turn_rate: 480.0, radius: 0.4,
-            scan_range: 10.0, build_time: 14.0, weapon: Some("ant_rocket"), aggressive: false,
+            name: "Ant Bazooka", family: Ant, role: Heavy, hp: 140.0, speed: 1.6667, turn_rate: 480.0, radius: 0.4,
+            scan_range: 10.0, build_time: 14.0, build_time_speciality: 10.0, weapon: Some("ant_rocket"), aggressive: false,
             model: "ant_bazooka", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
             // the tube mouth on the right shoulder on the fire frame (ant crew, measured on the GLB)
             muzzle: Some((0.25, 0.56, 0.44)),
-            source: "opensa ants_heavy: HP 7350, Speed 78, BuildDuration 350, ScanRadius 10, FireDelay 9; ORIGINAL VALUES: health 140 (FUN_00401000 / FUN_004015e0)",
+            source: "opensa ants_heavy: HP 7350, Speed 78, BuildDuration 350, ScanRadius 10, FireDelay 9; ORIGINAL VALUES: health 140 (FUN_00401000 / FUN_004015e0); ORIGINAL (2026-10-14): speed 40 px/s, breeds in 14 s (10 s for its speciality colour)",
         ),
         // ------------------------------------------------------------- beetles
         "beetle_ladybug": (
-            name: "Lady Bug", family: Beetle, role: Light, hp: 150.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
-            scan_range: 6.0, build_time: 8.0, weapon: Some("beetle_mg"), aggressive: false,
+            name: "Lady Bug", family: Beetle, role: Light, hp: 150.0, speed: 2.0833, turn_rate: 420.0, radius: 0.55,
+            scan_range: 6.0, build_time: 8.0, build_time_speciality: 6.0, weapon: Some("beetle_mg"), aggressive: false,
             model: "beetle_ladybug", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
             // the gun mouth on the shot frame (beetle crew, measured on the GLB)
             muzzle: Some((0.0, 0.19, 0.88)),
-            source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200; ORIGINAL VALUES: health 150 (FUN_00404060 / FUN_004046a0)",
+            source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200; ORIGINAL VALUES: health 150 (FUN_00404060 / FUN_004046a0); ORIGINAL (2026-10-14): speed 50 px/s, breeds in 8 s (6 s for its speciality colour)",
         ),
         "beetle_shrapnel": (
-            name: "Shrapnel Beetle", family: Beetle, role: Medium, hp: 400.0, speed: 2.12, turn_rate: 360.0, radius: 0.48,
-            scan_range: 6.0, build_time: 18.0, weapon: Some("beetle_shrapnel"), aggressive: false,
+            name: "Shrapnel Beetle", family: Beetle, role: Medium, hp: 400.0, speed: 1.875, turn_rate: 360.0, radius: 0.48,
+            scan_range: 6.0, build_time: 18.0, build_time_speciality: 12.0, weapon: Some("beetle_shrapnel"), aggressive: false,
             model: "beetle_shrapnel", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
             // the top of the back launcher as its flaps open (beetle crew)
             muzzle: Some((0.0, 0.46, 0.28)),
-            source: "opensa beetles_medium: HP 20200, Speed 87, BuildDuration 450; ORIGINAL VALUES: health 400 (FUN_00404c80 / FUN_00405260)",
+            source: "opensa beetles_medium: HP 20200, Speed 87, BuildDuration 450; ORIGINAL VALUES: health 400 (FUN_00404c80 / FUN_00405260); ORIGINAL (2026-10-14): speed 45 px/s, breeds in 18 s (12 s for its speciality colour)",
         ),
         "beetle_cannon": (
-            name: "Cannon Beetle", family: Beetle, role: Heavy, hp: 150.0, speed: 1.29, turn_rate: 300.0, radius: 0.45,
-            scan_range: 13.0, build_time: 28.0, weapon: Some("beetle_cannon"), aggressive: false,
+            name: "Cannon Beetle", family: Beetle, role: Heavy, hp: 150.0, speed: 1.25, turn_rate: 300.0, radius: 0.45,
+            scan_range: 13.0, build_time: 28.0, build_time_speciality: 21.0, weapon: Some("beetle_cannon"), aggressive: false,
             model: "beetle_cannon", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
             // the cannon mouth on the shot frame (beetle crew)
             muzzle: Some((0.0, 0.39, 0.52)),
-            source: "opensa beetles_heavy: HP 7600, Speed 53, BuildDuration 700, ScanRadius 13; ORIGINAL VALUES: health 150 (FUN_00403400 / FUN_004039e0)",
+            source: "opensa beetles_heavy: HP 7600, Speed 53, BuildDuration 700, ScanRadius 13; ORIGINAL VALUES: health 150 (FUN_00403400 / FUN_004039e0); ORIGINAL (2026-10-14): speed 30 px/s, breeds in 28 s (21 s for its speciality colour)",
         ),
         // ------------------------------------------------------------- spiders
         "spider_black_widow": (
-            name: "Black Widow", family: Spider, role: Light, hp: 300.0, speed: 3.59, turn_rate: 600.0, radius: 0.5,
-            scan_range: 6.0, build_time: 8.0, weapon: Some("spider_bite"), melee: true, aggressive: true,
+            name: "Black Widow", family: Spider, role: Light, hp: 300.0, speed: 3.3333, turn_rate: 600.0, radius: 0.5,
+            scan_range: 6.0, build_time: 8.0, build_time_speciality: 6.0, weapon: Some("spider_bite"), melee: true, aggressive: true,
             // 0.45: one idle tick between bites instead of three, same bite rate (spider crew)
             model: "spider_black_widow", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
             // where the fangs close at the strike (spider crew)
             muzzle: Some((0.0, 0.07, 0.74)),
-            source: "opensa spiders_light: HP 15400, Speed 147, BuildDuration 200, stance AttackAnything; ORIGINAL VALUES: health 300 (FUN_0040e310 / FUN_0040e8f0)",
+            source: "opensa spiders_light: HP 15400, Speed 147, BuildDuration 200, stance AttackAnything; ORIGINAL VALUES: health 300 (FUN_0040e310 / FUN_0040e8f0); ORIGINAL (2026-10-14): speed 80 px/s, breeds in 8 s (6 s for its speciality colour)",
         ),
         "spider_sniper": (
-            name: "Spider Sniper", family: Spider, role: Medium, hp: 120.0, speed: 2.25, turn_rate: 480.0, radius: 0.5,
-            scan_range: 13.0, build_time: 18.0, weapon: Some("spider_sniper"), aggressive: false,
+            name: "Spider Sniper", family: Spider, role: Medium, hp: 120.0, speed: 2.0833, turn_rate: 480.0, radius: 0.5,
+            scan_range: 13.0, build_time: 18.0, build_time_speciality: 14.0, weapon: Some("spider_sniper"), aggressive: false,
             model: "spider_sniper", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
             // the flash on the carapace front (spider crew)
             muzzle: Some((0.0, 0.46, 0.20)),
-            source: "opensa spiders_medium: HP 6900, Speed 92, BuildDuration 450, ScanRadius 13; ORIGINAL VALUES: health 120 (FUN_0040fab0 / FUN_00410090)",
+            source: "opensa spiders_medium: HP 6900, Speed 92, BuildDuration 450, ScanRadius 13; ORIGINAL VALUES: health 120 (FUN_0040fab0 / FUN_00410090); ORIGINAL (2026-10-14): speed 50 px/s, breeds in 18 s (14 s for its speciality colour)",
         ),
         "spider_missile": (
-            name: "Missile Spider", family: Spider, role: Heavy, hp: 250.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
-            scan_range: 17.0, build_time: 22.0, weapon: Some("spider_missile"), aggressive: false,
+            name: "Missile Spider", family: Spider, role: Heavy, hp: 250.0, speed: 2.0833, turn_rate: 420.0, radius: 0.55,
+            scan_range: 17.0, build_time: 22.0, build_time_speciality: 17.0, weapon: Some("spider_missile"), aggressive: false,
             model: "spider_missile", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
             // between the two front tube mouths of the back launcher (spider crew)
             muzzle: Some((0.0, 0.58, -0.09)),
-            source: "opensa spiders_heavy: HP 13000, Speed 92, BuildDuration 550, ScanRadius 17; ORIGINAL VALUES: health 250 (FUN_0040ee70 / FUN_0040f450)",
+            source: "opensa spiders_heavy: HP 13000, Speed 92, BuildDuration 550, ScanRadius 17; ORIGINAL VALUES: health 250 (FUN_0040ee70 / FUN_0040f450); ORIGINAL (2026-10-14): speed 50 px/s, breeds in 22 s (17 s for its speciality colour)",
         ),
         // ----------------------------------------------------------- scorpions
         "scorpion_savage": (
-            name: "Savage Scorpion", family: Scorpion, role: Light, hp: 350.0, speed: 2.39, turn_rate: 480.0, radius: 0.5,
+            name: "Savage Scorpion", family: Scorpion, role: Light, hp: 350.0, speed: 2.2917, turn_rate: 480.0, radius: 0.5,
             scan_range: 6.0, build_time: 10.0, weapon: Some("scorpion_sting"), melee: true, aggressive: true,
             model: "scorpion_savage", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
             // the sting barb at the strike (scorpion crew, measured on the GLB)
             muzzle: Some((0.0, 0.33, 0.53)),
-            source: "opensa scorpions_light: HP 17528, Speed 98, BuildDuration 250, stance AttackAnything; ORIGINAL VALUES: health 350 (FUN_0040b6f0 / FUN_0040bcd0)",
+            source: "opensa scorpions_light: HP 17528, Speed 98, BuildDuration 250, stance AttackAnything; ORIGINAL VALUES: health 350 (FUN_0040b6f0 / FUN_0040bcd0); ORIGINAL (2026-10-14): speed 55 px/s, breeds in 10 s",
         ),
         "scorpion_spear_gun": (
-            name: "Spear Gun Scorpion", family: Scorpion, role: Medium, hp: 170.0, speed: 2.0, turn_rate: 420.0, radius: 0.5,
+            name: "Spear Gun Scorpion", family: Scorpion, role: Medium, hp: 170.0, speed: 1.875, turn_rate: 420.0, radius: 0.5,
             scan_range: 17.0, build_time: 20.0, weapon: Some("scorpion_spear"), aggressive: false,
             model: "scorpion_spear_gun", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
             // the harpoon tip as it leaves the tail launcher (scorpion crew, measured on the GLB)
             muzzle: Some((0.0, 0.87, 0.16)),
-            source: "opensa scorpions_medium: HP 8600, Speed 82, BuildDuration 500, ScanRadius 17; ORIGINAL VALUES: health 170 (FUN_0040c250 / FUN_0040c830)",
+            source: "opensa scorpions_medium: HP 8600, Speed 82, BuildDuration 500, ScanRadius 17; ORIGINAL VALUES: health 170 (FUN_0040c250 / FUN_0040c830); ORIGINAL (2026-10-14): speed 45 px/s, breeds in 20 s",
         ),
         "scorpion_ninja": (
-            name: "Ninja Scorpion", family: Scorpion, role: Heavy, hp: 250.0, speed: 2.56, turn_rate: 480.0, radius: 0.5,
+            name: "Ninja Scorpion", family: Scorpion, role: Heavy, hp: 250.0, speed: 2.5, turn_rate: 480.0, radius: 0.5,
             scan_range: 13.0, build_time: 30.0, weapon: Some("scorpion_star"), aggressive: false,
             model: "scorpion_ninja", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
             // the star's release point above the body (scorpion crew, measured on the GLB)
             muzzle: Some((0.0, 0.95, 0.02)),
-            source: "opensa scorpions_heavy: HP 12900, Speed 105, BuildDuration 750, ScanRadius 13; ORIGINAL VALUES: health 250 (FUN_0040cea0 / FUN_0040d480)",
+            source: "opensa scorpions_heavy: HP 12900, Speed 105, BuildDuration 750, ScanRadius 13; ORIGINAL VALUES: health 250 (FUN_0040cea0 / FUN_0040d480); ORIGINAL (2026-10-14): speed 60 px/s, breeds in 30 s",
         ),
         // --------------------------------------------------------------- wasps
         "wasp_assault": (
-            name: "Assault Wasp", family: Wasp, role: Light, hp: 100.0, speed: 4.81, turn_rate: 720.0, radius: 0.55,
-            scan_range: 8.0, build_time: 10.0, weapon: Some("wasp_mg"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            name: "Assault Wasp", family: Wasp, role: Light, hp: 100.0, speed: 4.5833, turn_rate: 720.0, radius: 0.55,
+            scan_range: 8.0, build_time: 10.0, build_time_speciality: 7.0, weapon: Some("wasp_mg"), flying: true, air: false, altitude: 0.7, aggressive: false,
             // scale 1.5 = the original sprite's size (wasp crew: the model was 0.67x it); 0.23 s lets the
             // abdomen gun fire at its 0.2 s reload
             model: "wasp_assault", model_scale: 1.5, attack_anim_time: 0.23, death_time: 1.2,
             // the abdomen tip, curled forward under the body (wasp crew, at model_scale 1.5)
             muzzle: Some((0.0, 0.24, 0.05)),
-            source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain; ORIGINAL VALUES: health 100 (FUN_00410710 / FUN_00410d50)",
+            source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain; ORIGINAL VALUES: health 100 (FUN_00410710 / FUN_00410d50); ORIGINAL (2026-10-14): speed 110 px/s, breeds in 10 s (7 s for its speciality colour)",
         ),
         "wasp_paralysis": (
-            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 200.0, speed: 3.27, turn_rate: 720.0, radius: 0.4,
-            scan_range: 15.0, build_time: 14.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 200.0, speed: 3.125, turn_rate: 720.0, radius: 0.4,
+            scan_range: 15.0, build_time: 14.0, build_time_speciality: 10.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
             // scale 0.72 = the original sprite's size (wasp crew: the model was 1.38x it)
             model: "wasp_paralysis", model_scale: 0.72, attack_anim_time: 0.4, death_time: 1.2,
             // the paralysis arrow's tip (wasp crew, at model_scale 0.72)
             muzzle: Some((0.0, 0.22, 0.62)),
-            source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15; ORIGINAL VALUES: health 200 (FUN_00411210 / FUN_004117c0)",
+            source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15; ORIGINAL VALUES: health 200 (FUN_00411210 / FUN_004117c0); ORIGINAL (2026-10-14): speed 75 px/s, breeds in 14 s (10 s for its speciality colour)",
         ),
         "wasp_sonic": (
-            name: "Sonic Wasp", family: Wasp, role: Heavy, hp: 300.0, speed: 3.78, turn_rate: 720.0, radius: 0.45,
-            scan_range: 8.0, build_time: 22.0, weapon: Some("wasp_sonic"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            name: "Sonic Wasp", family: Wasp, role: Heavy, hp: 300.0, speed: 3.75, turn_rate: 720.0, radius: 0.45,
+            scan_range: 8.0, build_time: 22.0, build_time_speciality: 16.0, weapon: Some("wasp_sonic"), flying: true, air: false, altitude: 0.7, aggressive: false,
             model: "wasp_sonic", model_scale: 0.97, attack_anim_time: 0.2, death_time: 1.2,
             // the sonic bell's mouth under the face (wasp crew, at model_scale 0.97)
             muzzle: Some((0.0, 0.39, 0.65)),
-            source: "opensa wasps_heavy: HP 15400, Speed 155, BuildDuration 550; ORIGINAL VALUES: health 300 (FUN_00411c90 / FUN_004122e0)",
+            source: "opensa wasps_heavy: HP 15400, Speed 155, BuildDuration 550; ORIGINAL VALUES: health 300 (FUN_00411c90 / FUN_004122e0); ORIGINAL (2026-10-14): speed 90 px/s, breeds in 22 s (16 s for its speciality colour)",
         ),
         // ------------------------------------------------------------- neutral
         "neutral_dragonfly": (
@@ -413,17 +413,17 @@
             source: "opensa flying_machine: HP 25000, Speed 105, CruiseAltitude 0c128; every 20 ticks two gobstoppers thrown 8.5 cells behind; shot down over land its pilot (a pirate grenadier) carries on; FLYINGMACHINE; ORIGINAL VALUES: health 500 (FUN_00407ef0 / FUN_00408280)",
         ),
         "neutral_bull_ant": (
-            name: "Bull Ant", family: Neutral, role: Creep, hp: 200.0, speed: 2.56, turn_rate: 540.0, radius: 0.42,
+            name: "Bull Ant", family: Neutral, role: Creep, hp: 200.0, speed: 2.5, turn_rate: 540.0, radius: 0.42,
             scan_range: 8.0, build_time: 5.0, weapon: Some("bull_bite"), melee: true, aggressive: true,
             model: "neutral_bull_ant", model_scale: 1.1, attack_anim_time: 0.45, death_time: 1.2,
-            source: "opensa ant_bull_pirate: HP 5300, Speed 105, ScanRadius 8, AttackAnything; ORIGINAL VALUES: health 200 (FUN_00406e50 / FUN_004073a0)",
+            source: "opensa ant_bull_pirate: HP 5300, Speed 105, ScanRadius 8, AttackAnything; ORIGINAL VALUES: health 200 (FUN_00406e50 / FUN_004073a0); ORIGINAL (2026-10-14): speed 60 px/s",
         ),
         "neutral_pirate_grenadier": (
-            name: "Pirate Grenadier", family: Neutral, role: Creep, hp: 160.0, speed: 2.25, turn_rate: 540.0, radius: 0.4,
+            name: "Pirate Grenadier", family: Neutral, role: Creep, hp: 160.0, speed: 1.6667, turn_rate: 540.0, radius: 0.4,
             scan_range: 8.0, build_time: 8.0, weapon: Some("pirate_grenade"), aggressive: true,
             model: "neutral_pirate_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
             muzzle: Some((0.32, 0.70, 0.38)),
-            source: "opensa ants_grenadier_pirate: HP 4400, Speed 92, ScanRadius 8; ORIGINAL VALUES: health 160 (FUN_004062c0 / FUN_00406820)",
+            source: "opensa ants_grenadier_pirate: HP 4400, Speed 92, ScanRadius 8; ORIGINAL VALUES: health 160 (FUN_004062c0 / FUN_00406820); ORIGINAL (2026-10-14): speed 40 px/s",
         ),
         // -------------------------------------------------------- creep plants
         // The original's hostile plants (Text\English.txt: Popcorn Plant, Seed Ball, Thorn Bush,

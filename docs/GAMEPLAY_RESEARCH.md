@@ -38,15 +38,19 @@ at the default game speed; tile size 24x24 px. Our data files convert these into
    a colony (type flag 0xffff, set by every colony's start-up routine) by walking to it in their
    "mode 20" instead of spreading round it, so an attack forms a line at one stretch of wall that
    the turrets pick off one by one (Mike, from playing it: "they all lined up in a straight line").
-   Ours: each team's melee bugs share one spot per colony (`World::siege_slot`): the three nearest
-   bite side by side, the rest wait in a straight line behind and step up as the front falls.
+   No code of the biters damages the colony there, though: a colony takes damage only from impact
+   objects (see the audit below), so in the original the line mostly stood and was shot. Ours (a
+   hybrid, Mike's choice): each team's melee bugs share one spot per colony (`World::siege_slot`);
+   the three nearest bite side by side, the rest wait in a straight line behind and step up as the
+   front falls.
 4. **Colonies have automatic turrets** that fire at enemy ground units (and air) in range and never
    at colonies. Turret count per family in OpenSA: Ant 2, Beetle 1, Spider 2, Scorpion 1 (two barrels),
    Wasp 1. Turrets rotate (16 facings in the sprites) and have a 2-frame firing animation.
 5. **Colony capture flow** (`Colony.cs`, `DefeatedColony.cs`, `ColonyBit.cs`, `TakeColonyBitOnIdle.cs`):
    - A colony reduced to 0 HP is replaced by a neutral, invulnerable "defeated/unclaimed colony".
-   - After `BitFireDelay` (75 ticks = 3.0 s) it launches `NumberOfBits` (9) colony bits to random free
-     tiles in an annulus 5..10 cells away, with an explosion effect per bit.
+   - After `BitFireDelay` (75 ticks = 3.0 s) it launches `NumberOfBits` (9; the original: 11, used
+     since 2026-10-14) colony bits to random free tiles in an annulus 5..10 cells away, with an
+     explosion effect per bit.
    - Each bit lives 500..750 ticks (20..30 s). A unit walking over a bit collects it for its owner.
      Idle units automatically walk to bits within 10 cells.
    - When all 9 bits are resolved (collected or expired; expired bits count for the neutral
@@ -57,9 +61,10 @@ at the default game speed; tile size 24x24 px. Our data files convert these into
    player (or allies) *and* every enemy has no required units; neutral/defeated colonies must be captured
    first. A human player with no colonies and no units loses immediately.
 8. **Production**: colonies produce units of their own family via a production queue with a per-unit
-   build duration (Soldier 125 ticks = 5 s, Grenadier 200 ticks, Bazooka 350 ticks in OpenSA). Ant
-   colonies get a -25% breeding time faction bonus. Produced units leave through an exit cell and go
-   to a rally point.
+   build duration (Soldier 125 ticks = 5 s, Grenadier 200 ticks, Bazooka 350 ticks in OpenSA). OpenSA
+   gives ant colonies a -25% breeding time bonus; the original does not (see the audit below: each
+   team colour breeds one family faster, and a colony rests 2 s after each bug). Produced units leave
+   through an exit cell and go to a rally point.
 9. **Sprite animation layout** (sequences yaml + decoded frames): 8 facings; faction units have
    idle (1 frame x 8), attack (2 x 8), move (3 x 8) and 2 death frames = 50 frames; wasp sonic has no
    separate attack frames (34); neutral flyers have 26 frames.
@@ -168,6 +173,28 @@ turrets cannot be hit (they fall with their colony); our standalone level turret
 have no original counterpart and keep OpenSA's values scaled by the colonies' ratio (1/40). Reload times
 are OpenSA's (they follow the original's attack animation timings) and speeds are unchanged.
 
+## OpenSA against the original program (2026-10-14)
+
+Mike: "we're trying to be original, go with the original game, not the OpenSA" - and keep a hybrid
+where OpenSA's rule makes the better game. Each OpenSA rule we used, checked against the decompiled
+original (`qa/re`), with the decision:
+
+| Rule | OpenSA (what we had) | The original | Decision |
+|---|---|---|---|
+| Walking speed | close to the original, 1-15% fast (Pirate Grenadier 35%) | each unit's start-up routine sets it: `FUN_00425d70(unit, speed px/s, ...)`, 24 px a cell: Ant Soldier 60, Grenadier 50, Bazooka 40, Lady Bug 50, Shrapnel Beetle 45, Cannon Beetle 30, Black Widow 80, Spider Sniper 50, Missile Spider 50, Savage Scorpion 55, Spear Gun 45, Ninja 60, Assault Wasp 110, Paralysis Wasp 75, Sonic Wasp 90, Bull Ant 60, Pirate Grenadier 40; diagonals x0.707 | original |
+| Breeding time | the original's, but Ant Soldier 5 s | table at 0x47bb28 (ms per colour, family, button): ants 4/8/14, beetles 8/18/28, spiders 8/18/22, scorpions 10/20/30, wasps 10/14/22 | original |
+| Breeding bonus | every ant colony 25% faster | none for ants; each team colour breeds one family faster: yellow wasps 7/10/16, red spiders 6/14/17, green ants 3/6/10, blue beetles 6/12/21, scorpions never (team index 0-3 = yellow, red, green, blue: the colony name table at 0x4900c0) | original (`rules.breeding_specialities`, `build_time_speciality`) |
+| Pause after each bug | none | 2000 ms (`FUN_00414d90`); a new bug appears at the colony's Creation Point and walks to its Exit Point | original (`rules.breed_pause`) |
+| Bits of a fallen colony | 9 | the owner is decided after 11 bits (`FUN_00414b70`) | original (the five colonies; OpenSA's boosters keep 9) |
+| Tied bits | neutral | the earliest colour of yellow, red, green, blue, neutral wins | **hybrid: OpenSA's neutral** (no colour favoured) |
+| Melee against colonies | barred | biters walk to the wall and line up (mode 20) but no code of theirs damages a colony: a colony takes damage only from impact objects (type 90000, message 12000/13100) | **hybrid: they line up and the front bites** (Mike's choice) |
+| Health of a captured colony | 25% | apparently none refilled: it comes back empty and heals while not breeding (not certain) | **hybrid: OpenSA's 25%** |
+| Unit cap | none (ours: 60 a team) | none found in the breeding code | **kept: 60** |
+| Turrets against flyers | yes | yes: turrets skip only colonies and their own team | same |
+
+Not yet checked: attack rates, terrain slowing, idle units attacking and chasing on their own,
+splash damage to the shooter's own side, the creatures' behaviour and the victory conditions.
+
 ## Assumptions / provisional behaviour (clearly labelled in code and data)
 
 A1. **Statistic values**: health, damage and range are the original's (above). Speed, reload and build
@@ -176,8 +203,8 @@ A1. **Statistic values**: health, damage and range are the original's (above). S
 A2. **Continuous breeding**: the original game (as remembered from descriptions) lets a colony breed a
     chosen unit type continuously. We implement "breed the selected type repeatedly while below the
     per-team unit cap". OpenSA uses a click-to-queue model; the original UI is not verifiable here.
-A3. **Unit cap**: OpenSA has none that we found; we add a configurable cap (default 60 per team) to
-    keep battles bounded. Provisional.
+A3. **Unit cap**: neither OpenSA nor the original's breeding code has one; we add a configurable cap
+    (default 60 per team) to keep battles bounded (kept on purpose, 2026-10-14).
 A4. **Colony bit pickup radius** is 0.6 cells (OpenRA crushing semantics use cell occupancy). Provisional.
 A5. **Bit expiry ownership**: expired bits count for neutral exactly as in OpenSA.
 A6. **Map flag** `melee_can_damage_colonies` (the Stage 2/3 demo maps set it) is no longer needed:

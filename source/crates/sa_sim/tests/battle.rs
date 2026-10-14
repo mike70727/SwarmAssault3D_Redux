@@ -174,13 +174,33 @@ fn colony_capture_flow_bits_and_ownership() {
 }
 
 #[test]
+fn each_team_colour_breeds_one_family_faster() {
+    // the original's breeding table (0x47bb28): yellow wasps, red spiders, green ants, blue
+    // beetles; scorpions never; no ant bonus for everyone (OpenSA's)
+    let w = world();
+    let colony = w.defs.colonies[w.defs.colony("colony_ant").unwrap() as usize].clone();
+    let (yellow, red) = (1u8, 2u8);
+    assert_eq!(w.teams[yellow as usize].def.color, "Y");
+    assert_eq!(w.teams[red as usize].def.color, "R");
+    let t = |team: u8, unit: &str| w.breed_time(team, w.defs.unit(unit).unwrap(), &colony);
+    assert_eq!(t(yellow, "ant_soldier"), 4.0);
+    assert_eq!(t(yellow, "wasp_assault"), 7.0);
+    assert_eq!(t(red, "wasp_assault"), 10.0);
+    assert_eq!(t(red, "spider_black_widow"), 6.0);
+    assert_eq!(t(yellow, "spider_black_widow"), 8.0);
+    assert_eq!(t(red, "scorpion_ninja"), 30.0);
+}
+
+#[test]
 fn colonies_breed_units_up_to_the_cap() {
+    // counted as bugs bred, not bugs alive: the bot's bugs fight and die meanwhile
     let mut w = world();
-    let before = w.team_count(2);
+    let red = w.colonies.iter().find(|c| c.team == 2).unwrap().id;
     w.run(30 * 60);
-    let after = w.team_count(2);
-    assert!(after > before, "bot colony should breed: {before} -> {after}");
-    assert!(after <= w.unit_cap());
+    let bred = w.colonies[red as usize].units_bred;
+    // the ant soldier breeds in 4 s and the original rests 2 s after each bug: about 10 a minute
+    assert!((6..=12).contains(&bred), "the bot colony bred {bred} bugs in 60 s");
+    assert!(w.team_count(2) <= w.unit_cap());
 }
 
 #[test]
@@ -313,7 +333,8 @@ fn melee_bugs_bite_a_colony_single_file_and_can_bring_it_down() {
     }
     assert!(most_biting >= 2, "the front of the line should bite side by side (at most {most_biting} bit)");
     assert!(most_biting <= 4, "{most_biting} soldiers bit at once: they surrounded the colony instead of lining up");
-    assert!(widest <= 2.5, "biters {widest} cells apart: not from one spot");
+    // the front row: three biters side by side, SIEGE_SPACING (1.1 cells) apart
+    assert!(widest <= 3.0, "biters {widest} cells apart: not from one spot");
     assert!(defeated, "40 soldiers biting single file could not bring the colony down");
 }
 

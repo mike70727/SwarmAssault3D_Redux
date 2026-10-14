@@ -557,7 +557,7 @@ fn update_sidebar(
                             if on {
                                 names[1] = Some(format!("NAME{f}{key}"));
                                 portrait = Some(format!("COLONY{f}{tier}3D{letter}"));
-                                let bt = u.build_time * def.build_time_multiplier * w.team_production_mult(col.team);
+                                let bt = w.breed_time(col.team, k, def);
                                 progress = Some(if bt > 0.0 { (col.production.progress / bt).clamp(0.0, 1.0) } else { 0.0 });
                             }
                         }

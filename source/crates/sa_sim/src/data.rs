@@ -256,6 +256,10 @@ pub struct UnitDef {
     pub scan_range: f32,
     /// Seconds a colony needs to breed one of these.
     pub build_time: f32,
+    /// Seconds at a colony whose team colour specialises in this family (`Rules::
+    /// breeding_specialities`; 0 = no faster time).  The original keeps both in one table
+    /// (0x47bb28, milliseconds per colour, family and breed button).
+    pub build_time_speciality: f32,
     pub weapon: Option<String>,
     /// Moves over obstacles/terrain (wasps and neutral flyers).
     pub flying: bool,
@@ -305,6 +309,7 @@ impl Default for UnitDef {
             radius: 0.35,
             scan_range: 6.0,
             build_time: 5.0,
+            build_time_speciality: 0.0,
             weapon: None,
             flying: false,
             air: false,
@@ -458,6 +463,12 @@ pub struct Rules {
     pub stuck_time: f32,
     /// Separation strength for local crowd avoidance.
     pub separation_strength: f32,
+    /// Seconds a colony waits after each bug before it starts the next (the original: 2000 ms,
+    /// FUN_00414d90).
+    pub breed_pause: f32,
+    /// The family each team colour breeds faster (the original's breeding table: yellow wasps, red
+    /// spiders, green ants, blue beetles; scorpions never), with the units' `build_time_speciality`.
+    pub breeding_specialities: Vec<(String, Family)>,
     pub source: String,
 }
 
@@ -472,6 +483,13 @@ impl Default for Rules {
             replan_interval: 0.6,
             stuck_time: 0.8,
             separation_strength: 6.0,
+            breed_pause: 2.0,
+            breeding_specialities: vec![
+                ("Y".into(), Family::Wasp),
+                ("R".into(), Family::Spider),
+                ("G".into(), Family::Ant),
+                ("B".into(), Family::Beetle),
+            ],
             source: "assumptions, see docs/GAMEPLAY_RESEARCH.md".into(),
         }
     }

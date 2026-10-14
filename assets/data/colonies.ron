@@ -19,11 +19,11 @@
                 (offset: (-0.09, 1.81), weapon: "colony_ant_mg", turn_rate: 720.0, node: "Turret_2", height: 3.60, muzzle: 1.27),
             ],
             produces: ["ant_soldier", "ant_grenadier", "ant_bazooka"],
-            build_time_multiplier: 0.75,   // OpenSA ant faction specialisation: -25% breeding time
+            build_time_multiplier: 1.0,   // no ant bonus in the original (OpenSA's -25% for every ant colony); each team colour breeds one family faster instead (rules.ron)
             exit_offset: (2.5, 2.5),
             rally_offset: (4.6, 4.6),
             model: "colony_ant",
-            bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
+            bits: (count: 11, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa ants_colony: HP 100000, 2 turrets ants_colony weapon, ChangesHealth 100/tick; bits: DefeatedColony 75 ticks delay, 9 bits, range 5-10, lifetime 500-750 ticks, ResurrectHealth 25%; ORIGINAL VALUES: original FUN_004127a0: health 2500, +10 every 500 ms while not breeding",
         ),
         "colony_beetle": (
@@ -41,7 +41,7 @@
             exit_offset: (2.5, 2.5),
             rally_offset: (4.6, 4.6),
             model: "colony_beetle",
-            bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
+            bits: (count: 11, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa beetles_colony: HP 100000, 1 cannon turret (range 12, reload 30 ticks, 1950 dmg, spread 300); ORIGINAL VALUES: original FUN_00413610: health 3500, +12 every 500 ms while not breeding",
         ),
         "colony_spider": (
@@ -60,7 +60,7 @@
             exit_offset: (2.5, 2.5),
             rally_offset: (4.6, 4.6),
             model: "colony_spider",
-            bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
+            bits: (count: 11, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa spiders_colony: HP 100000, 2 sniper turrets (range 13, reload 25 ticks, 1450 dmg); ORIGINAL VALUES: original FUN_00417160: health 4000, +14 every 500 ms while not breeding",
         ),
         "colony_scorpion": (
@@ -78,7 +78,7 @@
             exit_offset: (2.5, 2.5),
             rally_offset: (4.6, 4.6),
             model: "colony_scorpion",
-            bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
+            bits: (count: 11, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa scorpions_colony: HP 100000, 1 twin spear turret (range 18, reload 30 ticks, 1470 dmg x2 barrels); ORIGINAL VALUES: original FUN_00416230: health 4500, +15 every 500 ms while not breeding",
         ),
         "colony_wasp": (
@@ -96,7 +96,7 @@
             exit_offset: (2.5, 2.5),
             rally_offset: (4.6, 4.6),
             model: "colony_wasp",
-            bits: (count: 9, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
+            bits: (count: 11, fire_delay: 3.0, min_range: 5.0, max_range: 10.0, lifetime_min: 20.0, lifetime_max: 30.0, resurrect_health: 0.25, pickup_radius: 0.6, flight_time: 1.2),
             source: "opensa wasps_colony: HP 100000, 1 machine-gun turret (range 12, reload 4 ticks, 782 dmg); ORIGINAL VALUES: original FUN_00418080: health 5000, +16 every 500 ms while not breeding",
         ),
         "turret_ant": (

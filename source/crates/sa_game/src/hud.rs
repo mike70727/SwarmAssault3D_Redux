@@ -359,7 +359,7 @@ fn selected_colony(sim: &GameSim, selection: &Selection) -> Option<(u32, Vec<Bre
         for p in &def.produces {
             if let Some(k) = w.defs.unit(p) {
                 let u = &w.defs.units[k as usize];
-                let bt = u.build_time * def.build_time_multiplier * w.team_production_mult(col.team);
+                let bt = w.breed_time(col.team, k, def);
                 if active == Some(k) && bt > 0.0 {
                     progress = (col.production.progress / bt).clamp(0.0, 1.0);
                 }

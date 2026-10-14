@@ -1750,10 +1750,11 @@ impl World {
                         let count = self.team_count(team);
                         if count < cap {
                             producing = true;
-                            let bt = self.defs.units[kind as usize].build_time * def.build_time_multiplier * self.team_production_mult(team);
+                            let bt = self.breed_time(team, kind, &def);
                             self.colonies[ci].production.progress += dt;
                             if self.colonies[ci].production.progress >= bt {
-                                self.colonies[ci].production.progress = 0.0;
+                                // the original rests 2 s after each bug before the next one starts
+                                self.colonies[ci].production.progress = -self.defs.rules.breed_pause;
                                 let exit = self.grid.nearest_free(pos + def.exit_offset);
                                 let heading = dir_to_heading(def.exit_offset);
                                 let id = self.spawn_unit(kind, team, exit, heading);
@@ -2711,6 +2712,18 @@ impl World {
     }
 
     /// Breed-time multiplier for a team: -10 % per owned production booster, floor 5 % (OpenSA).
+    /// Seconds `team`'s colony (`colony`) needs to breed one `kind`: the unit's own time, or its
+    /// faster one where the team colour specialises in its family (the original's table), scaled by
+    /// the colony, boosters, cheats and procedural speed.
+    pub fn breed_time(&self, team: u8, kind: u16, colony: &ColonyDef) -> f32 {
+        let u = &self.defs.units[kind as usize];
+        let colour = self.teams.get(team as usize).map(|t| t.def.color.as_str()).unwrap_or("X");
+        let special = u.build_time_speciality > 0.0
+            && self.defs.rules.breeding_specialities.iter().any(|(c, f)| c == colour && *f == u.family);
+        let base = if special { u.build_time_speciality } else { u.build_time };
+        base * colony.build_time_multiplier * self.team_production_mult(team)
+    }
+
     pub fn team_production_mult(&self, team: u8) -> f32 {
         let cheat = match self.cheats.fast_breed {
             Some((t, f)) if t == team && f > 0.0 => f,
