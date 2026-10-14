@@ -288,6 +288,25 @@ pub struct Stats {
     pub captures: u32,
 }
 
+/// One of a level's neutral flyers (`World::flyer_slots`). As in the original, each flyer of the
+/// level makes a pass, waits off the map, and comes back; one shot down stays down (its routine
+/// stays in its crash state).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct FlyerSlot {
+    kind: u16,
+    /// The flyer while it is on its pass.
+    unit: Option<UnitId>,
+    /// Seconds to its next pass while it is off the map.
+    wait: f32,
+    /// Shot down: it never comes back.
+    down: bool,
+}
+
+/// The original's ant hole (FUN_004058d0): the first group 30-60 s into the level, then one every
+/// 30 + 2 x (0..30) s; 1-6 a group, each a Bull Ant or a Pirate Grenadier at even odds.
+const PIRATES_FIRST: (f32, f32) = (30.0, 60.0);
+const PIRATES_EVERY: (f32, f32) = (30.0, 90.0);
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct World {
     pub defs: Defs,
@@ -316,6 +335,15 @@ pub struct World {
     /// Countdown per `map.rules.creeps` pool (empty until the first tick).
     #[serde(default)]
     creep_timers: Vec<f32>,
+    /// The level's flyers, one slot each per flyer pool (`update_flyer_slots`).
+    #[serde(default)]
+    flyer_slots: Vec<Vec<FlyerSlot>>,
+    /// Flyers that flew off the map this tick (their slots wait for the next pass).
+    #[serde(skip)]
+    departed: Vec<UnitId>,
+    /// The ant hole's first group has been timed (the original: 30-60 s into the level).
+    #[serde(default)]
+    pirates_started: bool,
     /// Units that died this tick (death weapons and death spawns still to run).
     #[serde(skip)]
     died: Vec<UnitId>,
@@ -459,6 +487,9 @@ impl World {
             flyer_timer: 0.0,
             pirate_timer: 0.0,
             creep_timers: Vec::new(),
+            flyer_slots: Vec::new(),
+            departed: Vec::new(),
+            pirates_started: false,
             died: Vec::new(),
             spatial: SpatialHash::new(2.0),
             scratch: Vec::new(),
@@ -1013,7 +1044,10 @@ impl World {
                 }
             }
 
-            // --- auto-targeting (idle, attack-move or aggressive stance)
+            // --- auto-targeting (idle or attack-move): the original's sensor looks once a second out
+            // to the unit's own radius (`scan_range`). An idle biter takes on bugs and creatures
+            // only, never a colony or a flyer; everything else takes on whatever it finds, enemy
+            // colonies too (units first). An attack-move takes colonies with any weapon.
             let order = self.units[i].as_ref().unwrap().order;
             let scan = self.units[i].as_ref().unwrap().scan_timer <= 0.0;
             if target.is_none()
@@ -1023,14 +1057,20 @@ impl World {
                 && matches!(order, Order::Idle | Order::AttackMove(_) | Order::Collect(_))
             {
                 let pos = self.units[i].as_ref().unwrap().pos;
-                let range = if matches!(order, Order::Idle | Order::Collect(_)) && !def.aggressive { w.range.max(def.scan_range * 0.5) } else { def.scan_range.max(w.range) };
-                if let Some(t) = self.find_target(pos, team, w, range) {
+                let range = def.scan_range.max(w.range);
+                let found = if def.melee && !matches!(order, Order::AttackMove(_)) {
+                    let mut bite = w.clone();
+                    bite.targets.colony = false;
+                    bite.targets.air = false;
+                    self.find_target(pos, team, &bite, range)
+                } else {
+                    self.find_target(pos, team, w, range)
+                };
+                if let Some(t) = found {
                     target = Some(t);
                     let u = self.units[i].as_mut().unwrap();
                     u.target = Some(t);
                     u.auto_target = true;
-                    u.leash = u.pos;
-                    u.chase_timer = 0.0;
                     u.path.clear();
                     u.path_goal = None;
                 }
@@ -1066,34 +1106,11 @@ impl World {
                 let visible = def.flying || self.grid.los(pos, self.sight_point(pos, t, tp)) || matches!(t, Target::Colony(_)) && dist < 2.0;
                 if in_range && (visible || matches!(w.projectile, ProjectileKind::Bullet { arc, .. } if arc > 0.05)) {
                     attack_now = true;
-                    self.units[i].as_mut().unwrap().chase_timer = 0.0;
                 } else {
-                    // Chase rules for auto-acquired targets (not explicit Attack orders):
-                    //  * stand-ground units (aggressive = false) and anyone shooting at an air target
-                    //    never chase; they drop the target after a short while out of range
-                    //  * aggressive units chase, but only within 1.5x scan range of the point where
-                    //    they spotted the target (leash), then give up and walk back
-                    let target_is_air = matches!(t, Target::Unit(id) if self.unit(id).is_some_and(|o| self.defs.units[o.kind as usize].air));
-                    let u = self.units[i].as_mut().unwrap();
-                    let attack_moving = matches!(u.order, Order::AttackMove(_));
-                    if u.auto_target && (!def.aggressive && !attack_moving || target_is_air) {
-                        u.chase_timer += dt;
-                        if u.chase_timer > 1.5 {
-                            u.target = None;
-                            u.chase_timer = 0.0;
-                        }
-                        goal = match u.order {
-                            Order::Move(p) | Order::AttackMove(p) => Some(p),
-                            _ => None,
-                        };
-                    } else if u.auto_target && !attack_moving && u.pos.distance(u.leash) > def.scan_range * 1.5 {
-                        u.target = None;
-                        let back = u.leash;
-                        u.order = Order::Move(back);
-                        goal = Some(back);
-                    } else {
-                        goal = Some(siege.map_or(tp, |(spot, _)| spot));
-                    }
+                    // out of range or out of sight: go after it. In the original every unit chases
+                    // what it took on until it is dead or gone (FUN_004264f0 again each time it
+                    // gets away; no leash, nobody stands their ground)
+                    goal = Some(siege.map_or(tp, |(spot, _)| spot));
                 }
             } else {
                 match order {
@@ -1123,6 +1140,9 @@ impl World {
                 let w = weapon.as_ref().unwrap();
                 let tp = self.target_pos(target.unwrap()).unwrap_or(pos);
                 let th = dir_to_heading(tp - pos);
+                // the original's random wait after the attack animation, drawn once per shot
+                let releasing = self.units[i].as_ref().is_some_and(|u| matches!(u.attack_timer, Some(t) if !u.shot_released && t + dt >= w.fire_delay));
+                let jitter = if releasing { jitter(&mut self.rng, w.reload_jitter) } else { 0.0 };
                 let u = self.units[i].as_mut().unwrap();
                 u.heading = turn_towards(u.heading, th, def.turn_rate.to_radians() * dt);
                 u.vel = Vec2::ZERO;
@@ -1149,8 +1169,9 @@ impl World {
                             u.shot_released = true;
                             // the reload counts from the start of the attack (OpenRA: the cooldown
                             // starts when the weapon fires, the projectile follows FireDelay later),
-                            // so a weapon fires once per `reload`, not once per reload + fire_delay
-                            u.reload = (w.reload - t).max(0.0);
+                            // so a weapon fires once per `reload`, not once per reload + fire_delay;
+                            // plus the original's random wait after the attack animation
+                            u.reload = (w.reload + jitter - t).max(0.0);
                             let team = u.team;
                             let fwd = heading_to_dir(u.heading);
                             let (fire_pos, fire_h) = match def.muzzle {
@@ -1160,9 +1181,11 @@ impl World {
                             };
                             self.fire_weapon(weapon_idx.unwrap(), team, Some(id), fire_pos, fire_h, target.unwrap(), &mut hits, &mut spawned_projectiles);
                         }
-                        if t >= def.attack_anim_time.max(w.fire_delay + 0.05) {
+                        if t >= def.attack_time(w) {
                             let u = self.units[i].as_mut().unwrap();
-                            if u.reload <= 0.0 {
+                            // (a reload due this very tick counts as done: summed ticks leave a
+                            // rounding crumb that would cost an idle tick per bite)
+                            if u.reload <= 1e-4 {
                                 // already reloaded: the next attack follows at once, without an idle
                                 // tick between the shots (the clip would blend back towards idle)
                                 u.attack_timer = Some(0.0);
@@ -1481,7 +1504,8 @@ impl World {
             let mut victims = Vec::new();
             for u in self.units.iter().flatten() {
                 let d = &self.defs.units[u.kind as usize];
-                if u.alive() && u.team != h.team && !d.air && d.plant.is_none() && u.pos.distance(h.pos) <= p.radius + d.radius {
+                // the original's paralysis impact (type 90001) freezes whoever it touches, own side too
+                if u.alive() && (w.friendly_fire || u.team != h.team) && !d.air && d.plant.is_none() && u.pos.distance(h.pos) <= p.radius + d.radius {
                     victims.push(u.id);
                 }
             }
@@ -1796,7 +1820,7 @@ impl World {
                             let want = dir_to_heading(up - tpos);
                             turret.yaw = turn_towards(turret.yaw, want, tdef.turn_rate.to_radians() * dt);
                             if turret.reload <= 0.0 && angle_diff(turret.yaw, want).abs() < 0.2 {
-                                turret.reload = w.reload;
+                                turret.reload = w.reload + jitter(&mut self.rng, w.reload_jitter);
                                 turret.fire_seq = turret.fire_seq.wrapping_add(1);
                                 self.events.push(SimEvent::TurretFired { colony: ci as u32, turret: ti });
                                 let muzzle = tpos + heading_to_dir(turret.yaw) * tdef.muzzle;
@@ -2100,6 +2124,7 @@ impl World {
     // -----------------------------------------------------------------------------------------
     fn update_creeps(&mut self, dt: f32) {
         // flying creeps cross the map on a fixed heading and drop their weapon periodically
+        self.departed.clear();
         let mut hits: Vec<Hit> = Vec::new();
         let mut spawned: Vec<Projectile> = Vec::new();
         let mut gone = Vec::new();
@@ -2128,7 +2153,7 @@ impl World {
                 // no pattern: drop the weapon every reload, bombs straight down, the rest thrown ahead
                 if u.reload <= 0.0 {
                     let w = self.defs.weapons[widx as usize].clone();
-                    u.reload = w.reload;
+                    u.reload = w.reload + jitter(&mut self.rng, w.reload_jitter);
                     let (pos, team) = (u.pos, u.team);
                     let aim = if matches!(w.projectile, ProjectileKind::Bomb { .. }) { pos } else { pos + dir * w.range.min(3.0) };
                     self.stats.shots += 1;
@@ -2149,7 +2174,7 @@ impl World {
                 u.reload = f.burst_gap;
             } else {
                 u.burst_left = f.burst.max(1);
-                u.reload = f.interval;
+                u.reload = f.interval + jitter(&mut self.rng, f.interval_jitter);
             }
             u.attack_seq = u.attack_seq.wrapping_add(1);
             let (pos, team, heading) = (u.pos, u.team, u.heading);
@@ -2174,6 +2199,7 @@ impl World {
         }
         for id in gone {
             self.remove_unit(id);
+            self.departed.push(id);
         }
         for h in hits {
             self.apply_hit(h);
@@ -2196,9 +2222,14 @@ impl World {
             }
         }
         if self.map.rules.pirates {
+            // the original's ant hole timing (`pirate_interval` was OpenSA's spawner)
+            if !self.pirates_started {
+                self.pirates_started = true;
+                self.pirate_timer = in_range(&mut self.rng, PIRATES_FIRST);
+            }
             self.pirate_timer -= dt;
             if self.pirate_timer <= 0.0 {
-                self.pirate_timer = self.map.rules.pirate_interval * self.rng.random_range(0.8..1.3);
+                self.pirate_timer = in_range(&mut self.rng, PIRATES_EVERY);
                 self.spawn_pirates();
             }
         }
@@ -2238,7 +2269,13 @@ impl World {
                 })
                 .collect();
         }
+        if self.flyer_slots.len() != n {
+            self.flyer_slots.resize(n, Vec::new());
+        }
         for i in 0..n {
+            if self.update_flyer_slots(i, dt) {
+                continue;
+            }
             self.creep_timers[i] -= dt;
             if self.creep_timers[i] > 0.0 {
                 continue;
@@ -2271,6 +2308,50 @@ impl World {
         }
     }
 
+    /// Pool `i` as the level's own flyers, when its units are flyers with the original's pass
+    /// timers (`FlyerDef::pass_wait`): `count` of them, each making its first pass after
+    /// `first_pass`, coming back `pass_wait` after leaving the map, and gone for good once shot
+    /// down. False for any other pool (plants keep the pool's own interval).
+    fn update_flyer_slots(&mut self, i: usize, dt: f32) -> bool {
+        let pool = &self.map.rules.creeps[i];
+        let kinds: Vec<u16> = pool.units.iter().filter_map(|u| self.defs.unit(u)).collect();
+        let timed = |k: &u16| self.defs.units[*k as usize].flying && self.defs.units[*k as usize].flyer.as_ref().is_some_and(|f| f.pass_wait.1 > 0.0);
+        if kinds.is_empty() || !kinds.iter().all(timed) {
+            return false;
+        }
+        let count = pool.count as usize;
+        while self.flyer_slots[i].len() < count {
+            let kind = kinds[self.rng.random_range(0..kinds.len())];
+            let first = self.defs.units[kind as usize].flyer.as_ref().map(|f| f.first_pass).unwrap_or_default();
+            let wait = in_range(&mut self.rng, first);
+            self.flyer_slots[i].push(FlyerSlot { kind, unit: None, wait, down: false });
+        }
+        for s in 0..self.flyer_slots[i].len() {
+            let slot = self.flyer_slots[i][s].clone();
+            if slot.down {
+                continue;
+            }
+            if let Some(id) = slot.unit {
+                if self.departed.contains(&id) {
+                    let wait = self.defs.units[slot.kind as usize].flyer.as_ref().map(|f| f.pass_wait).unwrap_or_default();
+                    let wait = in_range(&mut self.rng, wait);
+                    self.flyer_slots[i][s] = FlyerSlot { unit: None, wait, ..slot };
+                } else if self.unit(id).is_none_or(|u| !u.alive()) {
+                    self.flyer_slots[i][s].down = true;
+                }
+                continue;
+            }
+            let wait = slot.wait - dt;
+            if wait > 0.0 {
+                self.flyer_slots[i][s].wait = wait;
+                continue;
+            }
+            let id = self.spawn_flyer(slot.kind);
+            self.flyer_slots[i][s].unit = Some(id);
+        }
+        true
+    }
+
     /// A random free cell of open ground with nobody on it (OpenSA PlantSpawner: 100 tries).
     fn free_plant_cell(&mut self) -> Option<Vec2> {
         let size = self.grid.size();
@@ -2288,9 +2369,10 @@ impl World {
         None
     }
 
-    /// Pirate ants emerge from an ant hole (random free spot), 1..6 of them (OpenSA shares).
+    /// Pirate ants emerge from an ant hole (random free spot), 1..6 of them, each a Bull Ant or a
+    /// Pirate Grenadier at even odds (the original's ant hole; OpenSA added 10% Bazookas).
     pub fn spawn_pirates(&mut self) {
-        let kinds: Vec<(u16, u32)> = [("neutral_bull_ant", 45), ("neutral_pirate_grenadier", 45), ("ant_bazooka_pirate", 10)]
+        let kinds: Vec<(u16, u32)> = [("neutral_bull_ant", 50), ("neutral_pirate_grenadier", 50)]
             .iter()
             .filter_map(|(k, s)| self.defs.unit(k).map(|i| (i, *s)))
             .collect();
@@ -2332,16 +2414,14 @@ impl World {
     // -----------------------------------------------------------------------------------------
     // neutral creep plants (OpenSA creep-plants.yaml, ^CoreNeutralTowerCreep)
     // -----------------------------------------------------------------------------------------
-    /// Is an enemy of the creeps (any player's creature, or a player's colony) within `range` of
-    /// `pos`? This is what sets off Seed Balls and Death Lollies (OpenSA ProximityExternalCondition
-    /// on every creature and building, measured centre to centre).
+    /// Is an enemy of the creeps (any player's creature) within `range` of `pos`, centre to centre?
+    /// This is what sets off Seed Balls and Death Lollies. Colonies never do: the original's Seed
+    /// Ball and Death Lolly skip them (FUN_00409c70, FUN_00408dd0), unlike OpenSA's proximity
+    /// trigger on every building.
     fn enemy_near(&self, pos: Vec2, range: f32) -> bool {
         let mut scratch = Vec::new();
         self.spatial.query(pos, range + 0.5, &mut scratch);
-        let near_unit = scratch.iter().any(|idx| {
-            self.units[*idx as usize].as_ref().is_some_and(|u| u.alive() && u.team != 0 && u.pos.distance(pos) <= range)
-        });
-        near_unit || self.colonies.iter().any(|c| c.active() && c.team != 0 && c.pos.distance(pos) <= range)
+        scratch.iter().any(|idx| self.units[*idx as usize].as_ref().is_some_and(|u| u.alive() && u.team != 0 && u.pos.distance(pos) <= range))
     }
 
     fn update_plants(&mut self, dt: f32) {
@@ -2478,7 +2558,7 @@ impl World {
                             u.attack_timer = Some(time);
                             if !u.shot_released && time >= w.fire_delay {
                                 u.shot_released = true;
-                                u.reload = w.reload;
+                                u.reload = w.reload + jitter(&mut self.rng, w.reload_jitter);
                                 let base = u.heading;
                                 match plant.attack {
                                     PlantAttack::Radial { count } => {
@@ -2645,6 +2725,17 @@ impl World {
 
 fn def_radius(w: &World, u: &Unit) -> f32 {
     w.defs.units[u.kind as usize].radius
+}
+
+/// Random extra seconds from 0 up to `max` (a weapon's `reload_jitter`, a flyer's
+/// `interval_jitter`); no draw at all when `max` is 0, so fixed timings use no randomness.
+fn jitter(rng: &mut SimRng, max: f32) -> f32 {
+    if max > 0.0 { rng.random_range(0.0..max) } else { 0.0 }
+}
+
+/// A random time in `(a, b)` (or `a` when the range is empty).
+fn in_range(rng: &mut SimRng, (a, b): (f32, f32)) -> f32 {
+    if b > a { rng.random_range(a..b) } else { a }
 }
 
 /// Idle units walk to the nearest landed colony bit within the rule radius (OpenSA

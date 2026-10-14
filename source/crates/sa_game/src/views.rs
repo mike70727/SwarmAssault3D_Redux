@@ -645,8 +645,12 @@ fn sync_animations(sim: Res<GameSim>, assets: Res<GameAssets>, mut stats: ResMut
                 }
             }
             Anim::Attack => {
+                // the clip fills one attack: the original's biters and machine guns hit faster than
+                // the clip is long, so it plays faster (`UnitDef::attack_time`)
                 let len = model.clip_len.get("attack").copied().unwrap_or(0.5).max(0.05);
-                anim.set_speed((len / def.attack_anim_time.max(0.1)).clamp(0.5, 3.0));
+                let defs = &sim.world.defs;
+                let time = def.weapon.as_ref().and_then(|w| defs.weapon(w)).map(|w| def.attack_time(&defs.weapons[w as usize])).unwrap_or(def.attack_anim_time);
+                anim.set_speed((len / time.max(0.05)).clamp(0.5, 5.0));
             }
             Anim::Death => {
                 let len = model.clip_len.get("death").copied().unwrap_or(1.0).max(0.05);

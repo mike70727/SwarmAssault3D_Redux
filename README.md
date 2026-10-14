@@ -63,7 +63,9 @@ Every level brings the original's neutral creatures, in the numbers the original
   Lollies.
 * **Flyers** with their bombing runs: the Dragonfly bombs both sides of its path, the Desert
   Fly's bombs split in two, the Spawn Moth sows seeds, and a shot-down Flying Machine drops its
-  pilot.
+  pilot. Each comes back for another pass a while after it leaves the map; shoot it down and it
+  is gone for good.
+* **Pirate ants** (Bull Ants and Pirate Grenadiers) that climb out of ant holes now and then.
 
 ### All the levels
 
@@ -178,9 +180,9 @@ More in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 
 ## Faithfulness
 
-Health, damage and range of every bug, neutral creature and colony turret, the bugs' walking
-speeds and the colonies' breeding times are the original program's own numbers, read from its
-code. The rest comes from OpenSA, a fan re-implementation of *Swarm Assault* on the OpenRA engine,
+Health, damage and range of every bug, neutral creature and colony turret, how fast each of them
+attacks and how far each bug sees, the bugs' walking speeds and the colonies' breeding times are
+the original program's own numbers, read from its code and animation files. The rest comes from OpenSA, a fan re-implementation of *Swarm Assault* on the OpenRA engine,
 checked against the original wherever its code could settle it; a few of OpenSA's rules are kept
 on purpose where they make the better game. Where the original's own data files could settle a
 question (creature counts per level, animations, turret mounts, the interface layout), they did.

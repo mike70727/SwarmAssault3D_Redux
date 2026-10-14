@@ -73,7 +73,8 @@ at the default game speed; tile size 24x24 px. Our data files convert these into
     plants or other wasps.
 11. **Beetle Shrapnel** fires 10 grenade-like projectiles around itself (3-cell range, 5000 inaccuracy).
 12. **Terrain speed**: ground units move at 100% on clear ground, 75% on rock, 50% on vegetation;
-    wasps ignore terrain (100% everywhere, can cross water).
+    wasps ignore terrain (100% everywhere, can cross water). The original does the same (part 2
+    of the audit below).
 13. **Neutral flyers**: Dragonfly drops bombs left/right while flying over; Desert Fly drops bouncing
     bombs that split; Spawn Moth drops puffs and seeds; Flying Machine drops gobstoppers and spawns a
     pirate grenadier pilot when shot down over land. They fly across the map and cannot be controlled.
@@ -192,14 +193,31 @@ original (`qa/re`), with the decision:
 | Unit cap | none (ours: 60 a team) | none found in the breeding code | **kept: 60** |
 | Turrets against flyers | yes | yes: turrets skip only colonies and their own team | same |
 
-Not yet checked: attack rates, terrain slowing, idle units attacking and chasing on their own,
-splash damage to the shooter's own side, the creatures' behaviour and the victory conditions.
+## OpenSA against the original program, part 2 (2026-10-14)
+
+The rest of the rules, checked the same way (decompiled program; frame timings and script lines of
+`Game\Game.ANI`; notes with function names and line numbers in `qa/re/audit_part2_findings.md`):
+
+| Rule | OpenSA (what we had) | The original | Decision |
+|---|---|---|---|
+| Attack rate | a fixed reload per weapon; our longer 3-D attack clips slowed biters to a bite every 0.45 s | `Game.ANI` frames carry a duration in ms and script lines; a "Damage" or "Fire Point" frame delivers one hit. Biters and machine guns loop their 2-frame attack animation (Ant Soldier 150+150 ms: a bite every 0.3 s; Lady Bug 0.2 s; Assault Wasp 0.1 s; Sonic Wasp 0.14 s). Every other shooter plays it once and then waits `rand() % A + B` ms: Grenadier 1.0-1.4 s a shot, Bazooka 1.1-2.1, Cannon Beetle 0.8-1.5, Shrapnel Beetle 0.3-0.8, Sniper 0.4-1.1, Missile Spider 0.7-2.2, Spear Gun 0.6-1.4, Ninja 0.22-0.62, Paralysis Wasp 0.9-2.4, Pirate Grenadier 1.0-1.3; turrets: ant 0.2, wasp 0.12, beetle 0.65-1.65, spider 0.6-1.2, scorpion 0.6-1.1 | **original** (`reload` + `reload_jitter`; the 3-D attack clip plays faster when the original hits sooner: `UnitDef::attack_time`) |
+| Terrain slowing | 75% on rough ground, 50% in vegetation, wasps unaffected | the same: `FUN_00428b10` (x0.75 / x0.5 by cell class) in the ground units' mover; the wasps' mover never calls it | same |
+| Idle units | scanned 4 times a second; only "aggressive" units (biters) chased, within a leash; the others scanned half their range and held their ground | every unit has a sensor of its own radius (Soldier 9 cells, Grenadier 7, Bazooka 9, Lady Bug 8, Shrapnel 8, Cannon 14, Black Widow 12, Sniper 16, Missile 18, Savage 10, Spear Gun 16, Ninja 14, Assault Wasp 15, Paralysis 15, Sonic 10, Bull Ant 9, Pirate Grenadier 7) that looks once a second while the unit is idle. Biters take on bugs and creatures, never a colony or a flyer; every other unit takes on whatever its sensor finds, enemy colonies and flyers too; colony turrets anything but colonies. A unit chases what it took on until it is dead or gone | **original** (`scan_range`, `rules.auto_target_interval` 1 s; no leash) |
+| Friendly fire | splash skipped the shooter's own side (but for the creatures') | the collision system pairs objects by their collision boxes and never tests teams, and a unit takes the damage of any impact that touches it (a paralysis impact freezes it): your own grenades, shells, shrapnel and paralysis arrows hurt your own bugs. OpenSA does the same (OpenRA's warheads hit every side by default) | **original** for bugs. Colonies take any impact too, their own side's included; ours still spare their own colony (left to Mike) |
+| Neutral flyers | can be shot down | can be shot while over the map (the "untouchable" flag is cleared at the start of a pass and set again off the map), by shooters and colony turrets; biters ignore them (Mike, who played it: "the shooters did shoot down the bugs"). Each of the level's flyers waits off the map between passes (Dragonfly 30-60 s, Desert Fly 20-40, Spawn Moth 15-35, Flying Machine 10-40, the first pass alike); one shot down never comes back. The Flying Machine drops a gobstopper every 0.5-2.0 s | **original** (`FlyerDef::pass_wait`, `first_pass`, `interval_jitter`; per-flyer slots in the level's pools) |
+| Death Lolly / Seed Ball | set off within 2 / 5 cells by creatures and colonies | sensor 1 (the cells next to it) / 6, creatures only | **original** |
+| Thorn Bush, Popcorn Plant | range 6, a thorn every 1.2 s; both shot colonies | Thorn Bush sensor 7, a thorn every 0.4-1.2 s; neither takes on colonies (the Choc Freckle does) | **original** |
+| Ant hole | 1-6 pirates every ~50 s from the start: 45% Bull Ant, 45% Pirate Grenadier, 10% Bazooka | the first group 30-60 s in, then every 30-90 s; 1-6 a group, Bull Ant or Pirate Grenadier at even odds | **original** (one ant hole a level: our levels do not record how many holes the original level had) |
+| Plants placed by the level / spawned | a pool tops itself up every few seconds | a placed plant is there from the start; the level's spawner plants each appear 10-30 s in (10-40 s for the Choc Freckle and Death Lolly), regrow 10-30 s after dying, and a spawner Thorn Bush plants a new bush nearby (49% every 10-30 s) | **not yet** (the pools keep OpenSA's timing) |
+| Victory | one team owns every colony and the others have no units left | the same: an 8x8-cell grid counts each team's colonies and units; a team wins when no other team has either (neutral colonies count, creatures do not); the sign comes 5 s later | same |
+| Defeat | told at once ("Keep watching" offered) | no defeat of its own: a wiped-out player watches until one team is left | **kept: told at once** (waiting for the computer players helps nobody) |
 
 ## Assumptions / provisional behaviour (clearly labelled in code and data)
 
-A1. **Statistic values**: health, damage and range are the original's (above). Speed, reload and build
-    time are taken from OpenSA and converted to cells/seconds; they are not verified against the
-    original. They can be edited in `assets/data/units.ron` and `assets/data/colonies.ron`.
+A1. **Statistic values**: health, damage, range, speed, breeding time, attack rate and sensor radius
+    are the original's (above). The rest (projectile speeds, inaccuracy, splash radii) comes from
+    OpenSA, converted to cells/seconds. Everything can be edited in `assets/data/units.ron` and
+    `assets/data/colonies.ron`.
 A2. **Continuous breeding**: the original game (as remembered from descriptions) lets a colony breed a
     chosen unit type continuously. We implement "breed the selected type repeatedly while below the
     per-team unit cap". OpenSA uses a click-to-queue model; the original UI is not verifiable here.

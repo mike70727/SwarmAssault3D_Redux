@@ -162,7 +162,12 @@ fn death_lollies_blow_up_when_approached() {
     let full = w.defs.units[kind(&w, "plant_lolly_red") as usize].hp;
     w.run(30);
     assert!(w.unit(a).unwrap().alive(), "nothing near yet");
-    let victim = bait(&mut w, Vec2::new(8.8, 10.5)); // 1.7 cells from lolly a, 3.7 from lolly b
+    // the original's lolly feels only the cells next to its own (sensor 1)
+    let passer = bait(&mut w, Vec2::new(8.5, 10.5)); // two cells off
+    w.run(3);
+    assert!(w.unit(a).unwrap().alive(), "a bug two cells off does not set it off");
+    w.unit_mut(passer).unwrap().pos = Vec2::new(38.5, 38.5);
+    let victim = bait(&mut w, Vec2::new(9.4, 10.5)); // in the next cell: 1.1 from lolly a, 3.1 from lolly b
     let victim_hp = w.unit(victim).unwrap().hp;
     w.run(3);
     assert!(!w.unit(a).unwrap().alive(), "lolly a goes off");
@@ -172,6 +177,29 @@ fn death_lollies_blow_up_when_approached() {
     assert_eq!(w.unit(far).unwrap().hp, full, "a lolly far away is untouched");
     let left = w.unit(victim).map(|u| if u.alive() { u.hp } else { 0.0 }).unwrap();
     assert!(left <= victim_hp - blast + 0.5 || left == 0.0, "{blast} damage to everything within 3 cells");
+}
+
+#[test]
+fn colonies_never_set_off_death_lollies_or_seed_balls() {
+    // the original's Death Lolly and Seed Ball skip colonies (OpenSA's trigger fired for them)
+    let defs = Defs::load_dir(&assets().join("data")).expect("data files");
+    let map = MapDef {
+        name: "meadow".into(),
+        width: 40,
+        height: 40,
+        teams: vec![TeamDef { id: 1, name: "Ants".into(), color: "Y".into(), controller: Controller::Human, bot_profile: String::new(), breed_speed: 1.0 }],
+        colonies: vec![ColonySpawn { colony: "colony_ant".into(), team: 1, pos: Vec2::new(20.0, 20.0), produce: None, defeated: false }],
+        ..Default::default()
+    };
+    let mut w = World::new(defs, map).expect("world");
+    w.map.rules.unit_cap = Some(0);
+    let half = w.defs.colonies[w.colonies[0].def as usize].half_extent;
+    let lolly = plant(&mut w, "plant_lolly_red", Vec2::new(20.0 + half + 0.5, 20.0));
+    let ball = plant(&mut w, "plant_seedball", Vec2::new(20.0, 20.0 + half + 1.5));
+    w.run(90);
+    assert!(w.unit(lolly).unwrap().alive(), "a colony right beside it does not set a lolly off");
+    assert_eq!(weapon_shots(&w, "plant_puff"), 0, "nor a seed ball");
+    assert!(w.unit(ball).unwrap().alive());
 }
 
 #[test]
@@ -270,16 +298,85 @@ fn creep_pools_keep_the_level_stocked_up_to_its_count() {
     for u in w.living_units().filter(|u| u.kind == k) {
         assert!(w.grid.is_blocked(w.grid.cell_of(u.pos)));
     }
-    // flyers: one pass at a time when the count is 1
+}
+
+/// Dragonflies of a one-pool level over `secs` seconds: (passes started, most at once, when the
+/// first pass started).
+fn dragonfly_passes(w: &mut World, secs: u32) -> (usize, usize, Option<f32>) {
+    let k = kind(w, "neutral_dragonfly");
+    let (mut passes, mut most, mut first, mut before) = (0, 0, None, 0);
+    for tick in 0..secs * 30 {
+        w.step();
+        let n = w.living_units().filter(|u| u.kind == k).count();
+        if n > before {
+            passes += n - before;
+            first.get_or_insert(tick as f32 / 30.0);
+        }
+        before = n;
+        most = most.max(n);
+    }
+    (passes, most, first)
+}
+
+#[test]
+fn each_flyer_of_the_level_comes_back_after_its_wait() {
+    // the original's Dragonfly: its first pass 30-60 s into the level, the next one 30-60 s after it
+    // leaves the map (the pool's own interval is OpenSA's and does not apply to flyers)
+    let mut w = meadow();
+    w.map.rules.creeps = vec![CreepPool { units: vec!["neutral_dragonfly".into()], count: 2, interval: (2.0, 2.0), first: (0.1, 0.1) }];
+    let (passes, most, first) = dragonfly_passes(&mut w, 240);
+    let first = first.expect("no dragonfly in 240 s");
+    assert!((30.0..=60.5).contains(&first), "the first pass came after {first:.1} s");
+    assert!(most <= 2, "{most} at once from two dragonflies");
+    // each: 30-60 s waiting + ~15 s crossing the meadow, so 3-5 passes each in 240 s
+    assert!((5..=10).contains(&passes), "{passes} passes of two dragonflies in 240 s");
+}
+
+#[test]
+fn a_flyer_shot_down_never_comes_back() {
+    // the original leaves a downed flyer in its crash state for good
     let mut w = meadow();
     w.map.rules.creeps = vec![CreepPool { units: vec!["neutral_dragonfly".into()], count: 1, interval: (2.0, 2.0), first: (0.1, 0.1) }];
     let k = kind(&w, "neutral_dragonfly");
-    let mut most = 0;
-    for _ in 0..(30 * 30) {
+    let mut shot = false;
+    for _ in 0..30 * 70 {
         w.step();
-        most = most.max(w.living_units().filter(|u| u.kind == k).count());
+        let flying = w.living_units().find(|u| u.kind == k).map(|u| u.id);
+        if let Some(id) = flying {
+            w.cheat_kill_enemies(1);
+            assert!(w.unit(id).is_none_or(|u| !u.alive()));
+            shot = true;
+            break;
+        }
     }
-    assert_eq!(most, 1);
+    assert!(shot, "the dragonfly made no pass in 70 s");
+    let (passes, _, _) = dragonfly_passes(&mut w, 300);
+    assert_eq!(passes, 0, "a downed dragonfly came back");
+}
+
+#[test]
+fn ant_holes_send_bull_ants_and_pirate_grenadiers_only() {
+    // the original's ant hole: 1-6 a group, each a Bull Ant or a Pirate Grenadier at even odds
+    // (OpenSA added Bazookas), the first group 30-60 s into the level
+    let mut w = meadow();
+    w.map.rules.pirates = true;
+    let (bull, gren) = (kind(&w, "neutral_bull_ant"), kind(&w, "neutral_pirate_grenadier"));
+    let mut first = None;
+    let mut seen = std::collections::HashMap::new();
+    for tick in 0..30 * 400 {
+        w.step();
+        for u in w.living_units().filter(|u| u.team == 0) {
+            seen.entry(u.id).or_insert(u.kind);
+        }
+        if first.is_none() && !seen.is_empty() {
+            first = Some(tick as f32 / 30.0);
+        }
+    }
+    let first = first.expect("no pirates in 400 s");
+    assert!((30.0..=60.5).contains(&first), "the first group came after {first:.1} s");
+    assert!(seen.values().all(|k| *k == bull || *k == gren), "only bull ants and pirate grenadiers");
+    let bulls = seen.values().filter(|k| **k == bull).count();
+    assert!(bulls > 0 && bulls < seen.len(), "both kinds turn up: {bulls} of {}", seen.len());
 }
 
 #[test]

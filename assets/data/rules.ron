@@ -4,7 +4,7 @@
         tick_hz: 30.0,
         unit_cap: 60,
         idle_bit_search_radius: 10.0,   // OpenSA TakeColonyBitOnIdle Radius: 10
-        auto_target_interval: 0.25,
+        auto_target_interval: 1.0,      // the original's sensors look once a second (FUN_00421f70)
         corpse_time: 8.0,
         replan_interval: 0.6,
         stuck_time: 0.8,

@@ -92,8 +92,12 @@ pub struct WeaponDef {
     /// Maximum range in cells (measured to the target's edge).
     pub range: f32,
     pub min_range: f32,
-    /// Seconds between shots.
+    /// Seconds between shots, counted from the start of an attack.
     pub reload: f32,
+    /// Extra seconds, drawn at random from 0 up to this, added to each reload. The original plays
+    /// most shooters' attack animation once and then waits `rand() % A + B` ms before the next
+    /// attack: `reload` = animation + B, `reload_jitter` = A (docs/GAMEPLAY_RESEARCH.md).
+    pub reload_jitter: f32,
     /// Damage per hit (OpenSA units; unit HP uses the same scale).
     pub damage: f32,
     /// Splash radius step in cells; 0 = single target only.
@@ -116,7 +120,9 @@ pub struct WeaponDef {
     /// Audio hook ids.
     pub fire_sound: String,
     pub impact_sound: String,
-    /// Can the weapon hurt units of the firing team through splash?
+    /// Can the weapon hurt units of the firing team through splash (and paralyse them)? Yes in the
+    /// original, whose collisions never look at teams, and in OpenSA (OpenRA's warheads hit every
+    /// side by default), so it is the default.
     pub friendly_fire: bool,
     /// Unit that grows where the shot lands, if that spot is free open ground (the seeds thrown by
     /// Seed Balls and Spawn Moths).
@@ -133,6 +139,7 @@ impl Default for WeaponDef {
             range: 1.5,
             min_range: 0.0,
             reload: 1.0,
+            reload_jitter: 0.0,
             damage: 100.0,
             spread: 0.0,
             falloff: vec![100.0, 37.0, 14.0, 5.0, 0.0],
@@ -146,7 +153,7 @@ impl Default for WeaponDef {
             effect: "hit_small".into(),
             fire_sound: String::new(),
             impact_sound: String::new(),
-            friendly_fire: false,
+            friendly_fire: true,
             spawn: None,
             trail: String::new(),
             source: String::new(),
@@ -213,6 +220,15 @@ pub struct FlyerDef {
     pub rest_time: f32,
     /// Seconds between drops (or between bursts).
     pub interval: f32,
+    /// Extra seconds, at random from 0 up to this, added to each interval (the original's Flying
+    /// Machine drops a gobstopper every 500 + rand() % 1500 ms).
+    pub interval_jitter: f32,
+    /// Seconds a flyer of the level's pool waits after leaving the map before its next pass, and
+    /// before its first one (random in the ranges; the original's flyer routines: Dragonfly 30-60 s,
+    /// Desert Fly 20-40, Spawn Moth 15-35, Flying Machine 10-40). A flyer shot down never comes
+    /// back. (0, 0) = the pool's own interval.
+    pub pass_wait: (f32, f32),
+    pub first_pass: (f32, f32),
     /// Drops per burst and the seconds between them (Desert Fly: two, 0.44 s apart).
     pub burst: u32,
     pub burst_gap: f32,
@@ -227,7 +243,19 @@ pub struct FlyerDef {
 
 impl Default for FlyerDef {
     fn default() -> Self {
-        Self { drop_time: 0.0, rest_time: 0.0, interval: 1.0, burst: 1, burst_gap: 0.4, aims: vec![Vec2::ZERO], shots: 1, extra_weapon: None }
+        Self {
+            drop_time: 0.0,
+            rest_time: 0.0,
+            interval: 1.0,
+            interval_jitter: 0.0,
+            pass_wait: (0.0, 0.0),
+            first_pass: (0.0, 0.0),
+            burst: 1,
+            burst_gap: 0.4,
+            aims: vec![Vec2::ZERO],
+            shots: 1,
+            extra_weapon: None,
+        }
     }
 }
 
@@ -269,9 +297,11 @@ pub struct UnitDef {
     pub altitude: f32,
     /// Neutral flyers cannot receive orders.
     pub controllable: bool,
-    /// Does the unit chase targets it auto-acquires (OpenSA "AttackAnything" stance)?
+    /// OpenSA's "AttackAnything" stance. No longer used: in the original every unit chases what it
+    /// takes on until it is dead (kept so older data files still read).
     pub aggressive: bool,
-    /// Melee attackers cannot damage colonies unless the map rule overrides it.
+    /// A biter: when idle it only takes on bugs and creatures, never a colony or a flyer (the
+    /// original's biters skip both; everything else takes on whatever its sensor finds).
     pub melee: bool,
     pub model: String,
     pub model_scale: f32,
@@ -330,6 +360,15 @@ impl Default for UnitDef {
             attack_loop_sound: String::new(),
             source: String::new(),
         }
+    }
+}
+
+impl UnitDef {
+    /// Seconds one attack takes with weapon `w`: the attack animation, cut short when the weapon
+    /// fires again sooner (the original's biters and machine guns loop a short animation, one hit a
+    /// loop: the 3-D clip is played faster to fit). The renderer times the clip with this too.
+    pub fn attack_time(&self, w: &WeaponDef) -> f32 {
+        self.attack_anim_time.min(w.reload).max(w.fire_delay + 0.05)
     }
 }
 
@@ -453,7 +492,7 @@ pub struct Rules {
     pub unit_cap: u32,
     /// Idle units walk to colony bits within this many cells (OpenSA TakeColonyBitOnIdle).
     pub idle_bit_search_radius: f32,
-    /// Seconds between auto-target scans.
+    /// Seconds between auto-target scans (the original's sensor: once a second, FUN_00421f70).
     pub auto_target_interval: f32,
     /// Seconds a corpse stays on the ground.
     pub corpse_time: f32,
@@ -478,7 +517,7 @@ impl Default for Rules {
             tick_hz: 30.0,
             unit_cap: 60,
             idle_bit_search_radius: 10.0,
-            auto_target_interval: 0.25,
+            auto_target_interval: 1.0,
             corpse_time: 8.0,
             replan_interval: 0.6,
             stuck_time: 0.8,
