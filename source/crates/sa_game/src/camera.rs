@@ -145,9 +145,10 @@ fn camera_input(
         if c.x <= m {
             pan.x -= 1.0;
         }
-        // the map view ends where the sidebar starts
+        // the map view ends where the sidebar starts; the screen's own right edge (past the
+        // sidebar) scrolls right too, as in the original
         let right_edge = s.x - sidebar.0;
-        if c.x >= right_edge - m && c.x < right_edge + m {
+        if (c.x >= right_edge - m && c.x < right_edge + m) || c.x >= s.x - m {
             pan.x += 1.0;
         }
         if c.y <= m {

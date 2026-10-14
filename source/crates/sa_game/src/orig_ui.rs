@@ -705,18 +705,48 @@ fn update_radar(sim: Res<GameSim>, cam: Option<Res<RtsCamera>>, time: Res<Time>,
     }
 }
 
-fn radar_click(buttons: Res<ButtonInput<MouseButton>>, nodes: Query<&RelativeCursorPosition, With<OrigRadarNode>>, cam: Option<ResMut<RtsCamera>>, radar: Option<Res<OrigRadar>>) {
+/// Click or drag on the radar: the camera goes to that spot, as in the original.  Only a press
+/// that starts on the radar counts (a selection box dragged over the sidebar does not move the
+/// camera); dragging on from there follows the cursor, held at the radar's edge.
+fn radar_click(buttons: Res<ButtonInput<MouseButton>>, nodes: Query<&RelativeCursorPosition, With<OrigRadarNode>>, cam: Option<ResMut<RtsCamera>>, radar: Option<Res<OrigRadar>>, mut held: Local<bool>) {
     if !buttons.pressed(MouseButton::Left) {
+        *held = false;
         return;
     }
     let (Some(mut cam), Some(radar)) = (cam, radar) else { return };
-    for rel in &nodes {
-        if let Some(n) = rel.normalized
-            && (0.0..=1.0).contains(&n.x)
-            && (0.0..=1.0).contains(&n.y)
-        {
-            cam.focus.x = n.x * radar.w as f32;
-            cam.focus.z = n.y * radar.h as f32;
-        }
+    if let Some(n) = nodes.iter().find_map(|rel| rel.normalized).and_then(|n| radar_point(n, buttons.just_pressed(MouseButton::Left), &mut held)) {
+        cam.focus.x = n.x * radar.w as f32;
+        cam.focus.z = n.y * radar.h as f32;
+    }
+}
+
+/// The map point (0..1 across the picture) of a press on a radar picture.  Bevy measures
+/// `RelativeCursorPosition` from the node's centre, -0.5..0.5 (it was 0..1 from the corner before
+/// 0.15, which left only the radar's bottom-right quarter clickable).  `held` remembers whether the
+/// press began on the radar.
+pub fn radar_point(centred: Vec2, just_pressed: bool, held: &mut bool) -> Option<Vec2> {
+    let n = centred + Vec2::splat(0.5);
+    if just_pressed {
+        *held = (0.0..=1.0).contains(&n.x) && (0.0..=1.0).contains(&n.y);
+    }
+    held.then(|| n.clamp(Vec2::ZERO, Vec2::ONE))
+}
+
+#[cfg(test)]
+mod radar_tests {
+    use super::*;
+
+    #[test]
+    fn radar_press_maps_the_whole_picture() {
+        let mut held = false;
+        // a press at the top-left corner, the centre and the bottom-right corner of the picture
+        assert_eq!(radar_point(Vec2::new(-0.5, -0.5), true, &mut held), Some(Vec2::ZERO));
+        assert_eq!(radar_point(Vec2::ZERO, true, &mut held), Some(Vec2::splat(0.5)));
+        assert_eq!(radar_point(Vec2::new(0.5, 0.5), true, &mut held), Some(Vec2::ONE));
+        // dragging on past the edge holds the edge
+        assert_eq!(radar_point(Vec2::new(0.9, -0.25), false, &mut held), Some(Vec2::new(1.0, 0.25)));
+        // a press that starts off the radar never moves the camera, even when it is dragged onto it
+        assert_eq!(radar_point(Vec2::new(-3.0, 0.0), true, &mut held), None);
+        assert_eq!(radar_point(Vec2::new(0.1, 0.1), false, &mut held), None);
     }
 }

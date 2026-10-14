@@ -113,7 +113,8 @@ fn volume_track_click(buttons: Res<ButtonInput<MouseButton>>, tracks: Query<&Rel
         return;
     }
     for rel in &tracks {
-        if let Some(n) = rel.normalized
+        // Bevy measures the cursor from the track's centre (-0.5..0.5): shift it to 0..1
+        if let Some(n) = rel.normalized.map(|n| n + Vec2::splat(0.5))
             && (0.0..=1.0).contains(&n.y)
             && (-0.02..=1.02).contains(&n.x)
         {

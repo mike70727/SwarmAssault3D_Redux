@@ -154,7 +154,8 @@ fn spin_sign(time: Res<Time>, mut q: Query<(&mut Sign, &mut ImageNode)>) {
 fn volume_slider(buttons: Res<ButtonInput<MouseButton>>, tracks: Query<&RelativeCursorPosition, With<VolumeTrack>>, mut knobs: Query<&mut crate::orig_menu::CanvasRect, With<VolumeKnob>>, mut settings: ResMut<Settings>) {
     if buttons.pressed(MouseButton::Left) {
         for rel in &tracks {
-            if let Some(n) = rel.normalized
+            // Bevy measures the cursor from the track's centre (-0.5..0.5): shift it to 0..1
+            if let Some(n) = rel.normalized.map(|n| n + Vec2::splat(0.5))
                 && (-0.1..=1.1).contains(&n.y)
                 && (-0.05..=1.05).contains(&n.x)
             {

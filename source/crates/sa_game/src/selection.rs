@@ -1,5 +1,5 @@
-//! Mouse selection (click, drag box, shift-add), orders (move, attack, attack-move, stop), colony
-//! production hotkeys and selection decorations.
+//! Mouse selection (click, double click, drag box, shift-add), orders (move, attack, attack-move,
+//! stop), colony production hotkeys and selection decorations.
 
 use bevy::prelude::*;
 use bevy::state::state_scoped::DespawnOnExit;
@@ -22,6 +22,26 @@ pub struct DragState {
     pub start: Option<Vec2>,
     pub current: Vec2,
     pub dragging: bool,
+    pub last_click: LastClick,
+}
+
+/// Two clicks on bugs of the same kind this close in time (seconds, real time) and place (pixels)
+/// are a double click: as in the original game, it selects every bug of that kind on the screen.
+const DOUBLE_CLICK_S: f32 = 0.45;
+const DOUBLE_CLICK_PX: f32 = 8.0;
+
+/// The last click on one of the player's bugs: real time, cursor position, unit kind.
+#[derive(Default)]
+pub struct LastClick(Option<(f32, Vec2, u16)>);
+
+impl LastClick {
+    /// Record a click on a bug of `kind`; true when it completes a double click (a third click then
+    /// starts a new pair).
+    fn click(&mut self, now: f32, at: Vec2, kind: u16) -> bool {
+        let double = self.0.is_some_and(|(t, p, k)| k == kind && now - t <= DOUBLE_CLICK_S && p.distance(at) <= DOUBLE_CLICK_PX);
+        self.0 = if double { None } else { Some((now, at, kind)) };
+        double
+    }
 }
 
 #[derive(Resource, Default)]
@@ -72,6 +92,7 @@ fn selection_input(
     mut mode: ResMut<OrderMode>,
     mut pending: ResMut<PendingOrders>,
     time: Res<Time>,
+    real: Res<Time<Real>>,
     sidebar: Res<crate::orig_ui::SidebarWidth>,
 ) {
     let Ok(window) = windows.single() else { return };
@@ -152,8 +173,26 @@ fn selection_input(
                 }
             }
             if let Some((_, id)) = best {
-                if sim.world.unit(id).is_some_and(|u| u.team == team) {
-                    picked.push(id);
+                if let Some(kind) = sim.world.unit(id).filter(|u| u.team == team).map(|u| u.kind) {
+                    if drag.last_click.click(real.elapsed_secs(), cursor, kind) {
+                        // double click: every bug of this kind in the 3-D view (left of the sidebar)
+                        let view = Vec2::new(window.width() - sidebar.0, window.height());
+                        for u in sim.world.living_units() {
+                            if u.team != team || u.kind != kind || !sim.world.unit_def(u).controllable {
+                                continue;
+                            }
+                            if let Ok(sp) = camera.world_to_viewport(cam_tf, Vec3::new(u.pos.x, 0.3, u.pos.y))
+                                && sp.x >= 0.0
+                                && sp.y >= 0.0
+                                && sp.x <= view.x
+                                && sp.y <= view.y
+                            {
+                                picked.push(u.id);
+                            }
+                        }
+                    } else {
+                        picked.push(id);
+                    }
                 }
             } else {
                 picked_colony = sim.world.pick_colony(p);
@@ -335,5 +374,26 @@ fn update_drag_rect(drag: Res<DragState>, mut q: Query<(&mut Node, &mut Visibili
         } else {
             *vis = Visibility::Hidden;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn double_click_needs_the_same_kind_quickly_and_in_place() {
+        let mut c = LastClick::default();
+        assert!(!c.click(1.0, Vec2::new(100.0, 100.0), 3));
+        assert!(c.click(1.3, Vec2::new(103.0, 101.0), 3));
+        assert!(!c.click(1.5, Vec2::new(103.0, 101.0), 3), "a third click starts a new pair");
+        assert!(!c.click(2.5, Vec2::new(103.0, 101.0), 3), "too slow");
+        assert!(c.click(2.8, Vec2::new(101.0, 100.0), 3));
+        let mut c = LastClick::default();
+        assert!(!c.click(1.0, Vec2::ZERO, 3));
+        assert!(!c.click(1.2, Vec2::ZERO, 4), "another kind of bug");
+        let mut c = LastClick::default();
+        assert!(!c.click(1.0, Vec2::ZERO, 3));
+        assert!(!c.click(1.2, Vec2::new(30.0, 0.0), 3), "too far apart");
     }
 }

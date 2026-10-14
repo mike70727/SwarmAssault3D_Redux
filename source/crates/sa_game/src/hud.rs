@@ -102,7 +102,7 @@ struct Minimap {
 }
 
 pub const HELP: &str = "Mouse: left click / drag selects, right click moves or attacks, wheel zooms, middle drag pans\n\
-T attack-move   X stop   C select all   Shift adds to the selection\n\
+Double-click a bug: every bug of that kind on the screen   T attack-move   X stop   C select all   Shift adds\n\
 Colony: click it, then the three buttons (or 1 / 2 / 3) choose what it breeds, 0 stops, R + click sets the rally point\n\
 WASD or screen edges pan, Q / E rotate, Home centres, Space pauses, [ ] game speed\n\
 The insignia at the top of the panel opens the menu (also Esc)\n\
@@ -629,19 +629,16 @@ fn update_minimap(sim: Res<GameSim>, cam: Option<Res<RtsCamera>>, time: Res<Time
     }
 }
 
-fn minimap_click(buttons: Res<ButtonInput<MouseButton>>, nodes: Query<&RelativeCursorPosition, With<MinimapNode>>, cam: Option<ResMut<RtsCamera>>, minimap: Option<Res<Minimap>>) {
+/// Click or drag on the minimap: the camera goes to that spot (see `orig_ui::radar_point`).
+fn minimap_click(buttons: Res<ButtonInput<MouseButton>>, nodes: Query<&RelativeCursorPosition, With<MinimapNode>>, cam: Option<ResMut<RtsCamera>>, minimap: Option<Res<Minimap>>, mut held: Local<bool>) {
     if !buttons.pressed(MouseButton::Left) {
+        *held = false;
         return;
     }
     let (Some(mut cam), Some(minimap)) = (cam, minimap) else { return };
-    for rel in &nodes {
-        if let Some(n) = rel.normalized
-            && (0.0..=1.0).contains(&n.x)
-            && (0.0..=1.0).contains(&n.y)
-        {
-            cam.focus.x = n.x * minimap.w as f32;
-            cam.focus.z = n.y * minimap.h as f32;
-        }
+    if let Some(n) = nodes.iter().find_map(|rel| rel.normalized).and_then(|n| crate::orig_ui::radar_point(n, buttons.just_pressed(MouseButton::Left), &mut held)) {
+        cam.focus.x = n.x * minimap.w as f32;
+        cam.focus.z = n.y * minimap.h as f32;
     }
 }
 

@@ -119,6 +119,7 @@ installed in `C:\Program Files (x86)\Swarm Assault` is found too.
 | Control | Action |
 |---|---|
 | Left click, left drag | select units or a colony |
+| Double click a bug | select every bug of that kind on the screen |
 | Right click | move or attack |
 | T | attack-move |
 | X | stop |
