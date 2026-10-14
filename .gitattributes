@@ -1,0 +1,9 @@
+# Line endings: text sources are stored with LF in the repository (a Windows checkout gets CRLF).
+*.rs text
+*.toml text
+*.md text
+*.ron text
+*.py text
+*.wesl text
+*.txt text
+*.sh text eol=lf
