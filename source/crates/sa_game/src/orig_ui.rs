@@ -401,8 +401,10 @@ struct OrigName(u8);
 struct OrigPortrait;
 #[derive(Component)]
 struct OrigProgress;
+/// The original sidebar's breeding buttons.  They carry `hud::BreedButton` too (its click handler
+/// breeds), so the look-alike interface's breed panel must leave their pictures alone.
 #[derive(Component)]
-struct OrigBreedIcon(usize);
+pub(crate) struct OrigBreedIcon(usize);
 #[derive(Component)]
 struct OrigRadarNode;
 
@@ -616,7 +618,10 @@ fn update_sidebar(
                 if img.image != h {
                     img.image = h;
                 }
-                img.color = if hovered.get() { Color::srgb(1.15, 1.15, 1.15) } else { Color::WHITE };
+                let tint = if hovered.get() { Color::srgb(1.15, 1.15, 1.15) } else { Color::WHITE };
+                if img.color != tint {
+                    img.color = tint;
+                }
                 *vis = Visibility::Inherited;
             }
             None => *vis = Visibility::Hidden,

@@ -462,7 +462,9 @@ fn update_breed_panel(
     server: Res<AssetServer>,
     mut ui: ResMut<UiAssets>,
     mut nodes: ParamSet<(
-        Query<(&BreedButton, &Hovered, &mut ImageNode, &mut Visibility)>,
+        // not the original sidebar's buttons: they share BreedButton for its click handler, and two
+        // systems setting one picture every frame made them flicker (Mike, 2026-10-14)
+        Query<(&BreedButton, &Hovered, &mut ImageNode, &mut Visibility), Without<crate::orig_ui::OrigBreedIcon>>,
         Query<(&BreedIcon, &mut ImageNode)>,
         Query<(&BreedBar, &mut Node, &mut Visibility)>,
         Query<(&BreedBarImage, &mut ImageNode)>,
