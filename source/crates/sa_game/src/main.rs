@@ -192,7 +192,7 @@ fn main() {
             DefaultPlugins
                 .set(WindowPlugin {
                     primary_window: Some(Window {
-                        title: "Swarm Assault 3D".into(),
+                        title: "Swarm Assault 3D Redux".into(),
                         resolution: WindowResolution::new(settings.width.max(640), settings.height.max(480)),
                         present_mode: if settings.vsync && !background { PresentMode::AutoVsync } else { PresentMode::AutoNoVsync },
                         mode,

@@ -32,6 +32,12 @@ impl RtsCamera {
     }
 }
 
+/// Camera tilt for a distance: steeper when zoomed out, flatter when close.
+fn pitch_for(distance: f32, min_distance: f32, max_distance: f32) -> f32 {
+    let t = (distance - min_distance) / (max_distance - min_distance);
+    (FRAC_PI_4 + t * 0.55).clamp(0.6, 1.5)
+}
+
 #[derive(Component)]
 pub struct MainCamera;
 
@@ -57,13 +63,17 @@ fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Setting
         .or_else(|| sim.world.map.camera.map(|c| Vec2::new(c.x, c.y - 4.0)))
         .or_else(|| sim.world.colonies.iter().find(|c| c.team == team).map(|c| c.pos))
         .unwrap_or(size * 0.5);
+    let (min_distance, max_distance) = (8.0, 70.0);
+    let distance = cli.zoom.unwrap_or(26.0);
+    // a --zoom start gets the tilt the wheel gives at that distance
+    let pitch = if cli.zoom.is_some() { pitch_for(distance, min_distance, max_distance) } else { 58f32.to_radians() };
     let cam = RtsCamera {
         focus: Vec3::new(focus.x, 0.0, focus.y + 4.0),
         yaw: 0.0,
-        pitch: 58f32.to_radians(),
-        distance: cli.zoom.unwrap_or(26.0),
-        min_distance: 8.0,
-        max_distance: 70.0,
+        pitch,
+        distance,
+        min_distance,
+        max_distance,
         map_size: size,
     };
     commands.spawn((
@@ -170,9 +180,7 @@ fn camera_input(
     }
     if zoom != 0.0 {
         cam.distance = (cam.distance * (1.0 + zoom)).clamp(cam.min_distance, cam.max_distance);
-        // steeper when zoomed out, flatter when close
-        let t = (cam.distance - cam.min_distance) / (cam.max_distance - cam.min_distance);
-        cam.pitch = (FRAC_PI_4 + t * 0.55).clamp(0.6, 1.5);
+        cam.pitch = pitch_for(cam.distance, cam.min_distance, cam.max_distance);
     }
     if controls.just_pressed(&keys, "center_camera") {
         cam.focus = Vec3::new(cam.map_size.x * 0.5, 0.0, cam.map_size.y * 0.5);

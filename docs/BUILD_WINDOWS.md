@@ -3,24 +3,29 @@
 ## Requirements
 
 * Windows 10/11 64-bit with a Vulkan 1.1 or DirectX 12 capable GPU and current drivers.
-* Rust toolchain 1.99.0 (the repository pins it in `rust-toolchain.toml`; `rustup` installs it
-  automatically).
+* Rust toolchain 1.99.0 (pinned in `source/rust-toolchain.toml`; `rustup` installs it on the first
+  build).
 * Nothing else: Bevy's Windows backend needs no extra SDKs (the MSVC toolchain `x86_64-pc-windows-msvc`
   is the default on Windows and works with `cargo build`).
 
 ## Build on Windows (native, recommended)
 
 ```powershell
-git clone <this repository>
-cd z-waif-1.13-ST
-cargo run --release -p swarm_assault_3d
+git clone https://github.com/mike70727/SwarmAssault3D_Redux.git
+cd SwarmAssault3D_Redux\source
+cargo build --release -p swarm_assault_3d
+cargo test -p sa_sim
+cd ..
+.\source\target\release\swarm_assault_3d.exe
 ```
 
-The first build takes several minutes (Bevy). The executable is
-`target\release\swarm_assault_3d.exe`; it looks for the `assets` folder next to the executable or in
-the current directory (override with the `SA_ASSETS` environment variable).
+The first build takes several minutes (Bevy). The game looks for the `assets` folder in the current
+directory, then next to the executable (override with the `SA_ASSETS` environment variable), so
+start it from the repository root or copy the executable next to `assets`. Release builds have no
+console window: the log goes to `log.txt` next to the executable, and a crash writes its message
+and backtrace to `crash.log` there.
 
-## Cross-compile from Linux (what this repository's release zip was built with)
+## Cross-compile from Linux (how the first, cloud-built package was made)
 
 ```bash
 sudo apt install mingw-w64
@@ -33,12 +38,9 @@ tools/package_windows.sh          # writes dist/SwarmAssault3D-windows-x64.zip
 carries the same top-level folder; extract all of them into one place). The loose baked textures
 in `assets/textures` are left out of the game package because the GLBs embed them.
 
-`.cargo/config.toml` already sets the mingw linker for that target. The cross-compiled executable
-was **not executed** anywhere (no Windows machine was available while building it); it was verified
-to link, to be a valid PE32+ GUI executable and to import only Windows system DLLs. Please run it on
-real hardware and report problems. Release builds hide the console window; set `RUST_LOG` and run
-from a terminal with `--help` style options if you need logs (they go to stdout, which is invisible
-without a console - use a debug build for log output).
+`.cargo/config.toml` sets the mingw linker for that target. The script still expects the cloud
+build's folder layout (`crates`, `tools` and `blender` beside `assets`); this repository keeps them
+under `source`, and its Windows builds are made natively as above.
 
 ## Running
 

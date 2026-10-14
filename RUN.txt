@@ -1,9 +1,12 @@
-Swarm Assault 3D - Windows x64 build (cross-compiled with mingw-w64, untested on Windows hardware)
+Swarm Assault 3D Redux - Windows x64
 
 Double-click swarm_assault_3d.exe (keep the assets folder next to it).
-Command line options: swarm_assault_3d.exe --help
+Your copy of the original Swarm Assault (optional): put it in original_game\Swarm Assault inside this
+  folder or the folder above, or set original_game_dir in assets\data\settings.ron. The game then uses
+  its ground, interface, effects and sounds; nothing of it ships with this package.
+Sound starts at volume 0: turn it up in Settings or with the in-game menu's slider.
 Settings: assets\data\settings.ron   Controls: assets\data\controls.ron
-Docs: docs\  (BUILD_WINDOWS.md has a manual test checklist)
-Sources (complete package only): source\ holds the Rust workspace (crates\, Cargo.toml, tools\;
-  build with cargo build --release -p swarm_assault_3d from source\ with this assets\ folder copied or
-  linked next to it) and source\blender\ (bpy scripts, .blend files with packed textures, previews).
+Command line options: swarm_assault_3d.exe --help
+Docs: README.md and docs\
+Sources: source\ holds the Rust workspace (build with cargo build --release -p swarm_assault_3d in
+  source\ and start the game from this folder) and source\blender\ (bpy scripts, .blend files, previews).

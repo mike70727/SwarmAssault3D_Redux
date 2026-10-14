@@ -240,7 +240,7 @@ fn rebuild_when_needed(
                 ("Gate 5 Creations, 1999", OrigFont::Small),
                 ("published by Mountain King Studios", OrigFont::Small),
                 ("", OrigFont::Small),
-                ("Swarm Assault 3D", OrigFont::Large),
+                ("Swarm Assault 3D Redux", OrigFont::Large),
                 ("a 3-D recreation, played with your own copy", OrigFont::Small),
                 ("levels and rules after the OpenSA project", OrigFont::Small),
                 ("built with Bevy and Blender", OrigFont::Small),
