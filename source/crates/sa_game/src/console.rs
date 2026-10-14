@@ -26,6 +26,8 @@ pub struct ConsoleState {
     pub request_options: bool,
     /// Set by the "select" command: the player's first colony gets selected on the next frame.
     pub request_select: bool,
+    /// Set by "select units": every unit of the player gets selected (automated screenshots).
+    pub request_select_units: bool,
     /// Set by the "settings" command: the settings dialog opens on the next frame.
     pub request_settings: bool,
 }
@@ -199,6 +201,7 @@ fn run_command(line: &str, console: &mut ConsoleState, sim: &mut GameSim, messag
         }
         "next" => console.request_next_level = true,
         "options" | "menu" => console.request_options = true,
+        "select" if arg.as_deref() == Some("units") => console.request_select_units = true,
         "select" => console.request_select = true,
         "settings" => console.request_settings = true,
         "march" => {
@@ -364,6 +367,10 @@ pub fn take_options_request(console: &mut ConsoleState) -> bool {
 
 pub fn take_select_request(console: &mut ConsoleState) -> bool {
     std::mem::take(&mut console.request_select)
+}
+
+pub fn take_select_units_request(console: &mut ConsoleState) -> bool {
+    std::mem::take(&mut console.request_select_units)
 }
 
 /// Forwards the "settings" command to the settings dialog.

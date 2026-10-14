@@ -267,7 +267,8 @@ fn hotkeys(
     }
 }
 
-fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderMode>, time: Res<Time>, ground: Option<Res<crate::ground::GroundHeight>>, mut gizmos: Gizmos) {
+#[allow(clippy::too_many_arguments)]
+fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderMode>, time: Res<Time>, ground: Option<Res<crate::ground::GroundHeight>>, orig: Option<Res<crate::orig_ui::OrigUi>>, mut gizmos: Gizmos) {
     let gy = |p: Vec2| crate::views::ground_at(&ground, p);
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
     let team = sim.human_team();
@@ -280,7 +281,10 @@ fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderM
             let r = sim.world.unit_def(u).radius + 0.15;
             let p = u.prev_pos.lerp(u.pos, sim.alpha);
             gizmos.circle(Isometry3d::new(Vec3::new(p.x, gy(p) + 0.04, p.y), flat), r, color);
-            // health arc: green->red bar above the unit
+            // health: green->red bar above the unit (with the original game, its own bars: orig_select.rs)
+            if orig.is_some() {
+                continue;
+            }
             let def = sim.world.unit_def(u);
             let frac = (u.hp / def.hp).clamp(0.0, 1.0);
             let base = Vec3::new(p.x - r, gy(p) + def.altitude + 1.1, p.y);

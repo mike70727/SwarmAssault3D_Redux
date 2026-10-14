@@ -302,12 +302,17 @@ fn spawn_overlays(commands: &mut Commands, ui: &UiAssets) {
     ));
 }
 
-/// The console's "select" command: selects the player's first colony (used by automated screenshots).
+/// The console's "select" command: selects the player's first colony; "select units" selects all
+/// of the player's units (used by automated screenshots).
 fn console_select(mut console: ResMut<crate::console::ConsoleState>, sim: Res<GameSim>, mut selection: ResMut<Selection>) {
+    let human = sim.human_team();
+    if crate::console::take_select_units_request(&mut console) {
+        selection.units = sim.world.living_units().filter(|u| u.team == human).map(|u| u.id).collect();
+        selection.colony = None;
+    }
     if !crate::console::take_select_request(&mut console) {
         return;
     }
-    let human = sim.human_team();
     if let Some(i) = sim.world.colonies.iter().position(|c| c.team == human && c.active()) {
         selection.units.clear();
         selection.colony = Some(i as u32);
