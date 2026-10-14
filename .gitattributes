@@ -7,3 +7,7 @@
 *.wesl text
 *.txt text
 *.sh text eol=lf
+
+# GitHub's language bar: the Blender scripts build the 3-D models (like the .blend files, they are
+# the models' source), so they are left out of the count and the bar shows the game's own code.
+source/blender/** linguist-detectable=false
