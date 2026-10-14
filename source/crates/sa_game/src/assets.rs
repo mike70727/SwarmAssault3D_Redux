@@ -122,8 +122,9 @@ fn load_assets(
         let [r, g, b] = sa_sim::team_rgb(&t.def.color);
         team_materials.insert(t.def.id, materials.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 0.5, ..default() }));
         team_colors.insert(t.def.id, Color::srgb(r, g, b));
-        // colony bodies are a lighter, more saturated tint of the team colour (as in the sprites)
-        let lift = |c: f32| (c * 0.6 + 0.45).min(1.0);
+        // colony bodies: a slightly lighter tint of the team colour, still as saturated as the
+        // original sprites (the old c * 0.6 + 0.45 turned yellow into cream)
+        let lift = |c: f32| (c * 0.9 + 0.1).min(1.0);
         team_colony_materials.insert(t.def.id, materials.add(StandardMaterial { base_color: Color::srgb(lift(r), lift(g), lift(b)), perceptual_roughness: 0.55, ..default() }));
         team_colony_colors.insert(t.def.id, Color::srgb(lift(r), lift(g), lift(b)));
     }

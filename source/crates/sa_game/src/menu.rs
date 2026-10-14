@@ -57,6 +57,7 @@ struct MenuExtra<'w, 's> {
     end_overlays: Query<'w, 's, Entity, With<EndOverlay>>,
     ui: Res<'w, UiAssets>,
     settings_overlays: Query<'w, 's, Entity, With<crate::settings_menu::SettingsOverlay>>,
+    orig: Option<Res<'w, crate::orig_ui::OrigUi>>,
 }
 
 /// Root entity of the main-menu UI (rebuilt when the level page changes).
@@ -295,7 +296,7 @@ fn on_activate(
         }
         MenuAction::Options => {
             if !pause.open {
-                open_pause(&mut commands, &mut pause, sim, &extra.ui);
+                open_pause(&mut commands, &mut pause, sim, &extra.ui, extra.orig.is_some());
             }
         }
         MenuAction::Settings => {
@@ -316,7 +317,18 @@ fn close_pause(commands: &mut Commands, overlays: &Query<Entity, With<PauseOverl
     }
 }
 
-fn pause_toggle(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, controls: Res<crate::controls::Controls>, mut pause: ResMut<PauseState>, sim: Option<ResMut<GameSim>>, overlays: Query<Entity, With<PauseOverlay>>, ui: Res<UiAssets>) {
+#[allow(clippy::too_many_arguments)]
+fn pause_toggle(
+    mut commands: Commands,
+    keys: Res<ButtonInput<KeyCode>>,
+    controls: Res<crate::controls::Controls>,
+    mut pause: ResMut<PauseState>,
+    sim: Option<ResMut<GameSim>>,
+    overlays: Query<Entity, With<PauseOverlay>>,
+    ui: Res<UiAssets>,
+    orig: Option<Res<crate::orig_ui::OrigUi>>,
+    end: Res<EndState>,
+) {
     if !controls.just_pressed(&keys, "menu") {
         return;
     }
@@ -324,14 +336,21 @@ fn pause_toggle(mut commands: Commands, keys: Res<ButtonInput<KeyCode>>, control
         close_pause(&mut commands, &overlays, &mut pause, sim);
         return;
     }
-    open_pause(&mut commands, &mut pause, sim, &ui);
+    if end.shown && orig.is_some() {
+        return; // the original's Game Over menu is up (or on its way)
+    }
+    open_pause(&mut commands, &mut pause, sim, &ui, orig.is_some());
 }
 
-/// Opens the options (pause) menu: a stone dialog over the paused game.
-pub fn open_pause(commands: &mut Commands, pause: &mut PauseState, sim: Option<ResMut<GameSim>>, ui: &UiAssets) {
+/// Opens the options (pause) menu: a stone dialog over the paused game. With the original game
+/// (`original`) its own in-game menu appears instead (orig_game_menu.rs builds it).
+pub fn open_pause(commands: &mut Commands, pause: &mut PauseState, sim: Option<ResMut<GameSim>>, ui: &UiAssets, original: bool) {
     pause.open = true;
     if let Some(mut sim) = sim {
         sim.paused = true;
+    }
+    if original {
+        return;
     }
     commands
         .spawn((
@@ -393,6 +412,7 @@ fn game_end_screen(
     time: Res<Time>,
     mut next: ResMut<NextState<AppState>>,
     ui: Res<UiAssets>,
+    orig: Option<Res<crate::orig_ui::OrigUi>>,
 ) {
     let human = sim.human_team();
     let won = sim.world.winner == Some(human);
@@ -410,6 +430,9 @@ fn game_end_screen(
         }
         progress.last_level = Some(cli.map.clone());
         progress.save();
+        if orig.is_some() {
+            return;
+        }
         let has_next = won && next_level_file(Some(&sim)).is_some();
         let title = if won { if campaign { "LEVEL COMPLETE" } else { "VICTORY" } } else { "DEFEATED" };
         let sub = match (won, campaign, number) {
@@ -474,9 +497,9 @@ fn console_next_level(mut console: ResMut<crate::console::ConsoleState>, sim: Op
 }
 
 /// The console's "options" command (also used by automated screenshots).
-fn console_options(mut commands: Commands, mut console: ResMut<crate::console::ConsoleState>, mut pause: ResMut<PauseState>, sim: Option<ResMut<GameSim>>, ui: Res<UiAssets>) {
+fn console_options(mut commands: Commands, mut console: ResMut<crate::console::ConsoleState>, mut pause: ResMut<PauseState>, sim: Option<ResMut<GameSim>>, ui: Res<UiAssets>, orig: Option<Res<crate::orig_ui::OrigUi>>) {
     if crate::console::take_options_request(&mut console) && !pause.open {
-        open_pause(&mut commands, &mut pause, sim, &ui);
+        open_pause(&mut commands, &mut pause, sim, &ui, orig.is_some());
     }
 }
 

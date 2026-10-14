@@ -32,8 +32,8 @@ impl Plugin for OrigMenuPlugin {
         }
         app.init_resource::<OrigMenu>()
             .add_systems(OnEnter(AppState::Menu), enter_menu)
-            .add_systems(OnEnter(AppState::Loading), loading_screen)
-            .add_systems(Update, (layout_canvas, button_art).run_if(|s: Res<State<AppState>>| matches!(s.get(), AppState::Menu | AppState::Loading)))
+            .add_systems(OnEnter(AppState::Loading), loading_screen.after(crate::sim_plugin::load_sim))
+            .add_systems(Update, (layout_canvas, button_art))
             .add_systems(Update, (title_input, list_wheel, rebuild_when_needed).chain().run_if(in_state(AppState::Menu)))
             .add_observer(on_action);
     }
@@ -74,26 +74,28 @@ enum OrigAction {
 
 /// A node placed in the 640x480 canvas (relative to its parent node).
 #[derive(Component, Clone, Copy)]
-struct CanvasRect(Rect);
+pub(crate) struct CanvasRect(pub Rect);
 
+/// A canvas of the original screen layout: its size in original pixels, scaled like the 640x480
+/// screen to fit the window.
 #[derive(Component)]
-struct CanvasNode;
+pub(crate) struct CanvasNode(pub Vec2);
 
 #[derive(Component)]
 struct MenuRoot;
 
 /// Button art: normal and pressed/hover pictures.
 #[derive(Component)]
-struct ButtonArt {
+pub(crate) struct ButtonArt {
     normal: Handle<Image>,
     hover: Handle<Image>,
 }
 
-fn rect(x: f32, y: f32, w: f32, h: f32) -> CanvasRect {
+pub(crate) fn rect(x: f32, y: f32, w: f32, h: f32) -> CanvasRect {
     CanvasRect(Rect::from_corners(Vec2::new(x, y), Vec2::new(x + w, y + h)))
 }
 
-fn abs() -> Node {
+pub(crate) fn abs() -> Node {
     Node { position_type: PositionType::Absolute, ..default() }
 }
 
@@ -108,7 +110,7 @@ fn spawn_canvas(commands: &mut Commands, state: AppState, background: Option<Han
             GlobalZIndex(2),
         ))
         .with_children(|root| {
-            root.spawn((CanvasNode, Node { width: px(CANVAS.x), height: px(CANVAS.y), ..default() })).with_children(|c| {
+            root.spawn((CanvasNode(CANVAS), Node { width: px(CANVAS.x), height: px(CANVAS.y), ..default() })).with_children(|c| {
                 if let Some(bg) = background {
                     c.spawn((ImageNode::new(bg), abs(), rect(0.0, 0.0, CANVAS.x, CANVAS.y)));
                 }
@@ -118,7 +120,7 @@ fn spawn_canvas(commands: &mut Commands, state: AppState, background: Option<Han
 }
 
 /// A picture button (normal / pressed art from the original).
-fn picture_button<B: Bundle>(c: &mut ChildSpawnerCommands, ui: &mut OrigUi, images: &mut Assets<Image>, normal: &str, hover: &str, r: CanvasRect, action: B) {
+pub(crate) fn picture_button<B: Bundle>(c: &mut ChildSpawnerCommands, ui: &mut OrigUi, images: &mut Assets<Image>, normal: &str, hover: &str, r: CanvasRect, action: B) {
     let (Some(n), Some(h)) = (ui.pic_keyed(images, normal), ui.pic_keyed(images, hover)) else { return };
     c.spawn((Button, ActivateOnPress, Hovered::default(), ButtonArt { normal: n.clone(), hover: h }, ImageNode::new(n), abs(), r, action));
 }
@@ -327,11 +329,21 @@ fn list_wheel(mut menu: ResMut<OrigMenu>, scroll: Res<AccumulatedMouseScroll>) {
 }
 
 /// The loading screen: one of the original's three pictures while the level loads.
-fn loading_screen(mut commands: Commands, ui: Res<OrigUi>, cli: Res<CliOptions>, time: Res<Time>) {
+/// A random loading picture with the level's name along its bottom bar, in the green list font
+/// ("Loading . 002) Defend Your Colony", as the original).
+fn loading_screen(mut commands: Commands, mut ui: ResMut<OrigUi>, mut images: ResMut<Assets<Image>>, sim: Option<Res<crate::sim_plugin::GameSim>>, time: Res<Time>) {
     commands.spawn((Camera2d, DespawnOnExit(AppState::Loading)));
     let pick = if ui.loading.is_empty() { None } else { Some(ui.loading[(time.elapsed_secs() * 1000.0) as usize % ui.loading.len()].clone()) };
-    let _ = &cli;
-    spawn_canvas(&mut commands, AppState::Loading, pick, |_| {});
+    let caption = sim.map(|s| match s.world.map.number {
+        Some(n) if s.world.map.category == "campaign" => format!("Loading . {n:03}) {}", s.world.map.name),
+        _ => format!("Loading . {}", s.world.map.name),
+    });
+    let text = caption.map(|c| ui.text(&mut images, OrigFont::List, &c));
+    spawn_canvas(&mut commands, AppState::Loading, pick, |c| {
+        if let Some((h, size)) = text {
+            c.spawn((ImageNode::new(h), abs(), rect(320.0 - size.x * 0.5, 459.0 - size.y * 0.5, size.x, size.y)));
+        }
+    });
 }
 
 /// Picture buttons show their pressed art while hovered.
@@ -345,11 +357,11 @@ fn button_art(mut q: Query<(&ButtonArt, &Hovered, &mut ImageNode)>) {
 }
 
 /// Scales the 640x480 canvas to fit the window and places everything on it.
-fn layout_canvas(windows: Query<&Window, With<PrimaryWindow>>, mut canvases: Query<&mut Node, (With<CanvasNode>, Without<CanvasRect>)>, mut nodes: Query<(&CanvasRect, &mut Node), Without<CanvasNode>>) {
+fn layout_canvas(windows: Query<&Window, With<PrimaryWindow>>, mut canvases: Query<(&CanvasNode, &mut Node), Without<CanvasRect>>, mut nodes: Query<(&CanvasRect, &mut Node), Without<CanvasNode>>) {
     let Ok(window) = windows.single() else { return };
     let s = (window.width() / CANVAS.x).min(window.height() / CANVAS.y).max(0.25);
-    for mut n in &mut canvases {
-        let (w, h) = (px(CANVAS.x * s), px(CANVAS.y * s));
+    for (canvas, mut n) in &mut canvases {
+        let (w, h) = (px(canvas.0.x * s), px(canvas.0.y * s));
         if n.width != w || n.height != h {
             n.width = w;
             n.height = h;

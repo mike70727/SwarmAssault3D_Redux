@@ -270,7 +270,7 @@
         ),
         // ------------------------------------------------------------- beetles
         "beetle_ladybug": (
-            name: "Lady Bug", family: Beetle, role: Light, hp: 7600.0, speed: 2.25, turn_rate: 420.0, radius: 0.42,
+            name: "Lady Bug", family: Beetle, role: Light, hp: 7600.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
             scan_range: 6.0, build_time: 8.0, weapon: Some("beetle_mg"), aggressive: false,
             model: "beetle_ladybug", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
             source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200",
@@ -333,7 +333,7 @@
             source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain",
         ),
         "wasp_paralysis": (
-            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.42,
+            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.5,
             scan_range: 15.0, build_time: 14.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
             model: "wasp_paralysis", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
             source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15",
@@ -346,7 +346,7 @@
         ),
         // ------------------------------------------------------------- neutral
         "neutral_dragonfly": (
-            name: "Dragonfly", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.6,
+            name: "Dragonfly", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.8,
             scan_range: 0.0, build_time: 0.0, weapon: Some("dragonfly_bomb"), flying: true, air: true, altitude: 1.6, controllable: false, aggressive: false,
             model: "neutral_dragonfly", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
             flyer: Some((drop_time: 3.2, rest_time: 1.2, interval: 0.38, aims: [(1.1, -1.1), (-1.1, -1.1)])),
@@ -370,7 +370,7 @@
             source: "opensa moth: HP 16000, Aircraft Speed 220; every 20 ticks five puffs and a seed thrown about 5 cells behind (seeds can grow into Seed Balls); MOTHFLUTTER",
         ),
         "neutral_flying_machine": (
-            name: "Flying Machine", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.6,
+            name: "Flying Machine", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.8,
             scan_range: 0.0, build_time: 0.0, weapon: Some("machine_gobstopper"), flying: true, air: true, altitude: 1.2, controllable: false, aggressive: false,
             model: "neutral_flying_machine", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
             flyer: Some((interval: 0.84, aims: [(0.0, -8.5)], shots: 2)),

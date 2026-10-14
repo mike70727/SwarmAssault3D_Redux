@@ -125,8 +125,8 @@ fn animate_plants(sim: Res<GameSim>, time: Res<Time>, mut views: Query<&mut Plan
                         // the bush flexes as it fires its thorns
                         tf.scale = rest.scale * (1.0 + 0.07 * bump(a / 0.25));
                     } else if def.model == "plant_popcorn" {
-                        // leaves lift as the bud pops, droop when hurt
-                        let lift = 1.0 + 0.18 * bump(a / 0.45) + 0.03 * sway;
+                        // leaves (and the flower stalk) breathe a little, droop when hurt
+                        let lift = 1.0 + 0.03 * sway;
                         tf.scale = rest.scale * Vec3::new(1.0, lift * if hurt { 0.7 } else { 1.0 }, 1.0);
                     }
                 }
@@ -135,7 +135,7 @@ fn animate_plants(sim: Res<GameSim>, time: Res<Time>, mut views: Query<&mut Plan
                     tf.scale = rest.scale * (1.0 + 0.4 * pop);
                     tf.rotation = rest.rotation * Quat::from_rotation_z(0.06 * sway) * Quat::from_rotation_x(0.05 * (t * 1.1 + v.sway).cos());
                     if hurt || dead > 0.0 {
-                        tf.translation.y *= 0.75;
+                        tf.translation.y *= 0.73; // stays on its drooping stalk
                         tf.rotation *= Quat::from_rotation_z(0.5 * dead.max(0.3));
                     }
                 }
@@ -332,28 +332,32 @@ fn popcorn_leaves(seed: u32) -> Mesh {
             (p, rgba(c, tint))
         });
     }
+    // the flower stalk (COLONYNEUTRALPOPCORN3D: the flower stands well above the leaves)
+    g.grid(6, 8, |u, v| {
+        let a = v * TAU;
+        let r = 0.045 - 0.015 * u;
+        let lean = Vec3::new(0.03 * u * u, 0.0, 0.02 * u);
+        (Vec3::new(a.cos() * r, 0.05 + u * POPCORN_FLOWER, a.sin() * r) + lean, rgba(mix([0.12, 0.2, 0.04], [0.32, 0.44, 0.1], u), 1.0))
+    });
     g.build()
 }
 
-/// The Popcorn Plant's flower: a stalk with a knobbly orange head of popcorn kernels.
+/// Height of the Popcorn Plant's flower head.
+const POPCORN_FLOWER: f32 = 0.72;
+
+/// The Popcorn Plant's flower: a knobbly orange head of popcorn kernels, centred on the origin
+/// (it pops in place when the plant fires).
 fn popcorn_bud(seed: u32) -> Mesh {
     let mut g = Geo::default();
     let ball = Sphere::new(1.0).mesh().ico(2).unwrap();
-    // stalk
-    g.grid(6, 8, |u, v| {
-        let a = v * TAU;
-        let r = 0.05 - 0.015 * u;
-        (Vec3::new(a.cos() * r, 0.05 + u * 0.33, a.sin() * r), rgba(mix([0.12, 0.2, 0.04], [0.3, 0.42, 0.1], u), 1.0))
-    });
-    // kernels
-    let n = 11;
+    let n = 13;
     for k in 0..n {
         let (p, s) = if k == 0 {
-            (Vec3::new(0.0, 0.46, 0.0), 0.12)
+            (Vec3::new(0.0, 0.03, 0.0), 0.13)
         } else {
             let a = k as f32 / (n - 1) as f32 * TAU + hash(k, 9, seed);
-            let up = 0.38 + 0.14 * hash(k, 8, seed);
-            (flat(a) * (0.08 + 0.04 * hash(k, 7, seed)) + Vec3::Y * up, 0.07 + 0.03 * hash(k, 6, seed))
+            let up = -0.06 + 0.16 * hash(k, 8, seed);
+            (flat(a) * (0.1 + 0.05 * hash(k, 7, seed)) + Vec3::Y * up, 0.075 + 0.035 * hash(k, 6, seed))
         };
         let warm = hash(k, 5, seed);
         g.add(&ball, Transform::from_translation(p).with_scale(Vec3::splat(s)), |lp| 0.14 * ((lp.x * 7.0 + k as f32).sin() * (lp.z * 6.0).cos()), |lp| {
@@ -519,7 +523,7 @@ fn build_plant_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, 
     let material = materials.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.72, double_sided: true, cull_mode: None, ..default() });
     let glossy = materials.add(StandardMaterial { base_color: Color::WHITE, perceptual_roughness: 0.28, reflectance: 0.6, double_sided: true, cull_mode: None, ..default() });
     let mut parts: HashMap<&'static str, Vec<(Part, Handle<Mesh>, Transform)>> = HashMap::new();
-    parts.insert("plant_popcorn", vec![(Part::Body, meshes.add(popcorn_leaves(3)), Transform::IDENTITY), (Part::Bud, meshes.add(popcorn_bud(5)), Transform::IDENTITY)]);
+    parts.insert("plant_popcorn", vec![(Part::Body, meshes.add(popcorn_leaves(3)), Transform::IDENTITY), (Part::Bud, meshes.add(popcorn_bud(5)), Transform::from_xyz(0.03, 0.05 + POPCORN_FLOWER + 0.04, 0.02))]);
     parts.insert("plant_thorn", vec![(Part::Body, meshes.add(thorn_bush(11)), Transform::IDENTITY)]);
     let mut ball = Vec::new();
     let r = 0.4;

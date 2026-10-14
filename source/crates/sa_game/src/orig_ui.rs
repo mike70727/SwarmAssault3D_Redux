@@ -89,6 +89,8 @@ pub enum OrigFont {
     LargeLight,
     /// small blue font (MLFONTSMALL)
     Small,
+    /// red digital digits of the game menu's numbers and clock (B_0..B_9, B_COLON)
+    Digits,
 }
 
 /// Glyph name suffixes of the Start.DDF fonts (S_ / SX_ prefixes).
@@ -160,6 +162,20 @@ fn load_font(orig: &OriginalGame, font: OrigFont) -> HashMap<char, Glyph> {
                 }
             }
         }
+        OrigFont::Digits => {
+            // kept full width so the clock's digits stay put
+            for c in "0123456789:!".chars() {
+                let n = match c {
+                    ':' => "COLON".to_string(),
+                    '!' => "EXCL".to_string(),
+                    d => d.to_string(),
+                };
+                if let Some(p) = orig.picture(&format!("B_{n}")) {
+                    let p = keyed(p);
+                    out.insert(c, Glyph { pic: if c == ':' { trim_columns(&p) } else { p } });
+                }
+            }
+        }
         OrigFont::Large | OrigFont::LargeLight | OrigFont::Small => {
             let prefix = match font {
                 OrigFont::Large => "MLFONTLARGED",
@@ -224,7 +240,7 @@ impl OrigUi {
         let loading = orig.loading.iter().map(|p| add(p.clone(), false)).collect();
         let title = orig.title.clone().map(|p| add(p, false));
         let mut fonts = HashMap::new();
-        for f in [OrigFont::List, OrigFont::ListDark, OrigFont::Large, OrigFont::LargeLight, OrigFont::Small] {
+        for f in [OrigFont::List, OrigFont::ListDark, OrigFont::Large, OrigFont::LargeLight, OrigFont::Small, OrigFont::Digits] {
             fonts.insert(f, load_font(orig, f));
         }
         let mut names: std::collections::HashSet<String> = orig.game.names().map(|s| s.to_string()).collect();
@@ -269,7 +285,7 @@ impl OrigUi {
         let glyphs = &self.fonts[&font];
         let height = glyphs.values().map(|g| g.pic.h).max().unwrap_or(16);
         let space = (height / 3).max(3);
-        let gap = if matches!(font, OrigFont::List | OrigFont::ListDark) { 0 } else { 1 };
+        let gap = if matches!(font, OrigFont::List | OrigFont::ListDark | OrigFont::Digits) { 0 } else { 1 };
         let width: u32 = text.chars().map(|c| glyphs.get(&c).map(|g| g.pic.w + gap).unwrap_or(space)).sum::<u32>().max(1);
         let mut out = Rgba::new(width, height);
         let mut x = 0i32;
@@ -325,6 +341,12 @@ pub fn unit_codes(model: &str) -> Option<(&'static str, &'static str, &'static s
         "neutral_desert_fly" => ("NEUTRAL", "", "FLY"),
         "neutral_spawn_moth" => ("NEUTRAL", "", "MOTH"),
         "neutral_flying_machine" => ("NEUTRAL", "", "FLYINGMACHINE"),
+        // creep plants (NAMENEUTRAL<key> plates and COLONYNEUTRAL<key>3D portraits)
+        "plant_popcorn" => ("NEUTRAL", "", "POPCORN"),
+        "plant_thorn" => ("NEUTRAL", "", "THORNBUSH"),
+        "plant_seedball" | "plant_seed" => ("NEUTRAL", "", "SEEDBALL"),
+        "plant_freckle" => ("NEUTRAL", "", "FRECKLE"),
+        "plant_lolly_blue" | "plant_lolly_orange" | "plant_lolly_white" | "plant_lolly_red" => ("NEUTRAL", "", "LOLLY"),
         _ => return None,
     })
 }
