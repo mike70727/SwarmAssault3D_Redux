@@ -27,6 +27,7 @@
             name: "Rocket", range: 9.0, reload: 2.2, damage: 1950.0, spread: 0.25, inaccuracy: 0.1,
             projectile: Bullet(speed: 8.54, arc: 0.02), targets: (ground: true, air: true, colony: true),
             fire_delay: 0.36, effect: "explosion_big", fire_sound: "rocket_launch", impact_sound: "explosion3",
+            trail: "smoke",
             source: "opensa ants_heavy: Range 9c0, ReloadDelay 55, Damage 1950, Spread 256, Bullet speed 350",
         ),
         // ------------------------------------------------------------- beetles
@@ -64,9 +65,9 @@
         ),
         "spider_missile": (
             name: "Cruise missile", range: 18.0, reload: 1.6, damage: 3000.0, spread: 0.25, inaccuracy: 0.1,
-            projectile: Missile(speed: 4.0, accel: 7.0, turn_rate: 240.0), targets: (ground: true, air: true, colony: true),
+            projectile: Missile(speed: 2.4, accel: 7.3, turn_rate: 176.0, max_speed: 8.5, range_limit: 40.0), trail: "smoke", targets: (ground: true, air: true, colony: true),
             fire_delay: 0.08, effect: "explosion_big", fire_sound: "missile_launch", impact_sound: "explosion2",
-            source: "opensa spiders_heavy: Range 18c0, ReloadDelay 40, Damage 3000, Spread 256, Missile speed 350 accel 12",
+            source: "opensa spiders_heavy: Range 18c0, ReloadDelay 40, Damage 3000, Spread 256; Missile launched at up to 100, accelerating 12 per tick to 350, turning 20 per tick (OpenRA default), RangeLimit 40c0, smoke trail, MISSILELAUNCH",
         ),
         // ----------------------------------------------------------- scorpions
         "scorpion_sting": (
@@ -260,12 +261,14 @@
             name: "Ant Grenadier", family: Ant, role: Medium, hp: 4400.0, speed: 2.25, turn_rate: 540.0, radius: 0.38,
             scan_range: 6.0, build_time: 8.0, weapon: Some("ant_grenade"), aggressive: false,
             model: "ant_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
+            muzzle: Some((0.0, 0.45, 0.2)),
             source: "opensa ants_medium: HP 4400, Speed 92, BuildDuration 200, FireDelay 10",
         ),
         "ant_bazooka": (
             name: "Ant Bazooka", family: Ant, role: Heavy, hp: 7350.0, speed: 1.9, turn_rate: 480.0, radius: 0.4,
             scan_range: 10.0, build_time: 14.0, weapon: Some("ant_rocket"), aggressive: false,
             model: "ant_bazooka", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            muzzle: Some((0.12, 0.42, 0.45)),
             source: "opensa ants_heavy: HP 7350, Speed 78, BuildDuration 350, ScanRadius 10, FireDelay 9",
         ),
         // ------------------------------------------------------------- beetles
@@ -273,18 +276,21 @@
             name: "Lady Bug", family: Beetle, role: Light, hp: 7600.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
             scan_range: 6.0, build_time: 8.0, weapon: Some("beetle_mg"), aggressive: false,
             model: "beetle_ladybug", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
+            muzzle: Some((0.0, 0.2, 0.55)),
             source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200",
         ),
         "beetle_shrapnel": (
             name: "Shrapnel Beetle", family: Beetle, role: Medium, hp: 20200.0, speed: 2.12, turn_rate: 360.0, radius: 0.48,
             scan_range: 6.0, build_time: 18.0, weapon: Some("beetle_shrapnel"), aggressive: false,
             model: "beetle_shrapnel", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            muzzle: Some((0.0, 0.45, 0.0)),
             source: "opensa beetles_medium: HP 20200, Speed 87, BuildDuration 450",
         ),
         "beetle_cannon": (
             name: "Cannon Beetle", family: Beetle, role: Heavy, hp: 7600.0, speed: 1.29, turn_rate: 300.0, radius: 0.45,
             scan_range: 13.0, build_time: 28.0, weapon: Some("beetle_cannon"), aggressive: false,
             model: "beetle_cannon", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            muzzle: Some((0.0, 0.45, 0.55)),
             source: "opensa beetles_heavy: HP 7600, Speed 53, BuildDuration 700, ScanRadius 13",
         ),
         // ------------------------------------------------------------- spiders
@@ -304,6 +310,7 @@
             name: "Missile Spider", family: Spider, role: Heavy, hp: 13000.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
             scan_range: 17.0, build_time: 22.0, weapon: Some("spider_missile"), aggressive: false,
             model: "spider_missile", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            muzzle: Some((0.0, 0.55, 0.0)),
             source: "opensa spiders_heavy: HP 13000, Speed 92, BuildDuration 550, ScanRadius 17",
         ),
         // ----------------------------------------------------------- scorpions
@@ -317,12 +324,14 @@
             name: "Spear Gun Scorpion", family: Scorpion, role: Medium, hp: 8600.0, speed: 2.0, turn_rate: 420.0, radius: 0.5,
             scan_range: 17.0, build_time: 20.0, weapon: Some("scorpion_spear"), aggressive: false,
             model: "scorpion_spear_gun", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            muzzle: Some((0.0, 0.7, 0.05)),
             source: "opensa scorpions_medium: HP 8600, Speed 82, BuildDuration 500, ScanRadius 17",
         ),
         "scorpion_ninja": (
             name: "Ninja Scorpion", family: Scorpion, role: Heavy, hp: 12900.0, speed: 2.56, turn_rate: 480.0, radius: 0.5,
             scan_range: 13.0, build_time: 30.0, weapon: Some("scorpion_star"), aggressive: false,
             model: "scorpion_ninja", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            muzzle: Some((0.0, 0.7, 0.05)),
             source: "opensa scorpions_heavy: HP 12900, Speed 105, BuildDuration 750, ScanRadius 13",
         ),
         // --------------------------------------------------------------- wasps
@@ -330,18 +339,21 @@
             name: "Assault Wasp", family: Wasp, role: Light, hp: 5300.0, speed: 4.81, turn_rate: 720.0, radius: 0.38,
             scan_range: 8.0, build_time: 10.0, weapon: Some("wasp_mg"), flying: true, air: false, altitude: 0.7, aggressive: false,
             model: "wasp_assault", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
+            muzzle: Some((0.0, -0.3, 0.35)),
             source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain",
         ),
         "wasp_paralysis": (
             name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.5,
             scan_range: 15.0, build_time: 14.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
             model: "wasp_paralysis", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            muzzle: Some((0.0, -0.3, 0.45)),
             source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15",
         ),
         "wasp_sonic": (
             name: "Sonic Wasp", family: Wasp, role: Heavy, hp: 15400.0, speed: 3.78, turn_rate: 720.0, radius: 0.45,
             scan_range: 8.0, build_time: 22.0, weapon: Some("wasp_sonic"), flying: true, air: false, altitude: 0.7, aggressive: false,
             model: "wasp_sonic", model_scale: 1.0, attack_anim_time: 0.25, death_time: 1.2,
+            muzzle: Some((0.0, -0.1, 0.45)),
             source: "opensa wasps_heavy: HP 15400, Speed 155, BuildDuration 550",
         ),
         // ------------------------------------------------------------- neutral

@@ -259,6 +259,9 @@ pub struct Projectile {
     pub alive: bool,
     pub bounces_left: u32,
     pub hop_len: f32,
+    /// Cells flown so far (missiles' range limit).
+    #[serde(default)]
+    pub traveled: f32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1036,7 +1039,12 @@ impl World {
                             u.shot_released = true;
                             u.reload = w.reload;
                             let team = u.team;
-                            let (fire_pos, fire_h) = (u.pos + heading_to_dir(u.heading) * def.radius * 0.8, def.altitude + 0.35);
+                            let fwd = heading_to_dir(u.heading);
+                            let (fire_pos, fire_h) = match def.muzzle {
+                                // x to the unit's right (forward x up), y up, z ahead
+                                Some(m) => (u.pos + Vec2::new(-fwd.y, fwd.x) * m.x + fwd * m.z, (def.altitude + m.y).max(0.05)),
+                                None => (u.pos + fwd * def.radius * 0.8, def.altitude + 0.35),
+                            };
                             self.fire_weapon(weapon_idx.unwrap(), team, Some(id), fire_pos, fire_h, target.unwrap(), &mut hits, &mut spawned_projectiles);
                         }
                         if t >= def.attack_anim_time.max(w.fire_delay + 0.05) {
@@ -1332,6 +1340,7 @@ impl World {
             alive: true,
             bounces_left: bounces,
             hop_len: dist,
+            traveled: 0.0,
         });
     }
 
@@ -1875,8 +1884,7 @@ impl World {
                         removed.push(p.id);
                     }
                 }
-                ProjectileKind::Missile { accel, turn_rate, .. } => {
-                    p.speed += accel * dt;
+                ProjectileKind::Missile { accel, turn_rate, max_speed, range_limit, .. } => {
                     let tp = p.target.and_then(|t| match t {
                         Target::Unit(id) => self.units.get(id.idx as usize).and_then(|s| s.as_ref()).filter(|u| u.id == id && u.alive()).map(|u| u.pos),
                         Target::Colony(c) => self.colonies.get(c as usize).map(|c| c.pos),
@@ -1884,10 +1892,26 @@ impl World {
                     let aim = tp.unwrap_or(p.aim);
                     p.aim = aim;
                     let want = dir_to_heading(aim - p.pos);
-                    p.heading = turn_towards(p.heading, want, turn_rate.to_radians() * dt);
+                    let turn = turn_rate.to_radians();
+                    // A target inside the turning circle cannot be hit at full speed: brake and
+                    // tighten the loop until it can, so the rocket circles round and then hits.
+                    let radius = p.speed / turn.max(0.01);
+                    let off = angle_diff(p.heading, want).abs();
+                    if off > 0.35 && p.pos.distance(aim) < radius * 1.3 {
+                        let floor = if max_speed > 0.0 { max_speed * 0.35 } else { p.speed * 0.5 };
+                        p.speed = (p.speed - 2.0 * accel.max(1.0) * dt).max(floor);
+                    } else {
+                        p.speed += accel * dt;
+                        if max_speed > 0.0 {
+                            p.speed = p.speed.min(max_speed);
+                        }
+                    }
+                    p.heading = turn_towards(p.heading, want, turn * dt);
                     p.pos += heading_to_dir(p.heading) * p.speed * dt;
+                    p.traveled += p.speed * dt;
                     p.height = (p.height + (0.6 - p.height) * dt * 2.0).max(0.2);
-                    if p.pos.distance(aim) <= 0.35 || p.t > 12.0 {
+                    let spent = range_limit > 0.0 && p.traveled > range_limit;
+                    if p.pos.distance(aim) <= 0.35 || spent || p.t > 12.0 {
                         p.alive = false;
                         hits.push(Hit { pos: p.pos, weapon: p.weapon, team: p.team, source: p.source, direct: p.target });
                         removed.push(p.id);

@@ -59,6 +59,8 @@ const EXPLOSIONS: &[(&str, f32)] = &[
     ("ExplosionF", 0.08),
     ("ExplosionG", 0.04),
     ("ExplosionX", 0.07),
+    // rocket smoke (OpenSA TrailImage smoke_trail on the bazooka and the missile spider)
+    ("SMOKEPUFF", 0.07),
 ];
 
 /// The original drew its effects over a black background with black as the colour key: the fire
@@ -159,7 +161,7 @@ impl Plugin for OrigFxPlugin {
             let mut frames_of = |name: &str| -> Vec<(Rgba, IVec2)> { orig.animation(name) };
             let mut built: Vec<(&'static str, f32, Vec<(Rgba, IVec2)>)> = Vec::new();
             for (name, spf) in EXPLOSIONS.iter().chain(PROJECTILES) {
-                let explosion = name.starts_with("Explosion");
+                let explosion = name.starts_with("Explosion") || *name == "SMOKEPUFF";
                 let f: Vec<(Rgba, IVec2)> = frames_of(name).into_iter().map(|(p, o)| (if explosion { glow_alpha(p) } else { black_key(p) }, o)).collect();
                 if !f.is_empty() {
                     built.push((name, *spf, f));
@@ -211,7 +213,7 @@ impl Plugin for OrigFxPlugin {
             world.insert_resource(OrigFx { anims, quad });
         }
         info!("original effects loaded: {count} frames");
-        app.add_systems(Update, (spawn_explosions, sync_projectile_sprites, animate_sprites).chain().run_if(in_state(AppState::InGame)));
+        app.add_systems(Update, (spawn_explosions, spawn_trails, sync_projectile_sprites, animate_sprites).chain().run_if(in_state(AppState::InGame)));
     }
 }
 
@@ -263,6 +265,34 @@ fn spawn_explosions(mut commands: Commands, sim: Res<GameSim>, fx: Res<OrigFx>, 
             Name::new("Explosion"),
         ));
     }
+}
+
+/// Rockets leave puffs of smoke behind them (weapons with `trail: "smoke"`).
+fn spawn_trails(mut commands: Commands, sim: Res<GameSim>, fx: Res<OrigFx>, time: Res<Time>, ground: Option<Res<GroundHeight>>, mut last: Local<HashMap<u32, f32>>) {
+    let Some(anim) = fx.anims.get("SMOKEPUFF") else { return };
+    let now = time.elapsed_secs();
+    let gy = |p: Vec2| ground.as_ref().map(|g| g.stand(p.x, p.y)).unwrap_or(0.0);
+    for p in &sim.world.projectiles {
+        if !p.alive || sim.world.defs.weapons[p.weapon as usize].trail != "smoke" {
+            continue;
+        }
+        let due = last.get(&p.id).is_none_or(|t| now - t >= 0.05);
+        if !due {
+            continue;
+        }
+        last.insert(p.id, now);
+        let origin = Vec3::new(p.pos.x, gy(p.pos) + p.height.max(0.1), p.pos.y);
+        commands.spawn((
+            Explosion { anim: "SMOKEPUFF", t: 0.0, origin },
+            DespawnOnExit(AppState::InGame),
+            NotShadowCaster,
+            Mesh3d(fx.quad.clone()),
+            MeshMaterial3d(anim.frames[0].material.clone()),
+            Transform::from_translation(origin).with_scale(anim.frames[0].size.extend(1.0)),
+            Name::new("Smoke"),
+        ));
+    }
+    last.retain(|id, _| sim.world.projectiles.iter().any(|p| p.alive && p.id == *id));
 }
 
 /// Projectiles with an original sprite get one (the game's own bead stays hidden under it).

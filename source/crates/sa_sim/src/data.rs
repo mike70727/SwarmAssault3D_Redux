@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
-use glam::Vec2;
+use glam::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -50,8 +50,19 @@ pub enum ProjectileKind {
     /// Straight or lobbed shot towards the aim point. `arc` is the apex height as a fraction of
     /// the travel distance (0 = straight bullet, ~0.35 = grenade lob).
     Bullet { speed: f32, arc: f32 },
-    /// Homing projectile that steers towards its target.
-    Missile { speed: f32, accel: f32, turn_rate: f32 },
+    /// Homing projectile that steers towards its target. It launches at `speed` and speeds up by
+    /// `accel` to `max_speed` (0 = no limit); it cannot turn faster than `turn_rate` degrees per
+    /// second, so a fast one loops round a moving target before it hits (Missile spider). It
+    /// blows up after `range_limit` cells of flight (0 = no limit).
+    Missile {
+        speed: f32,
+        accel: f32,
+        turn_rate: f32,
+        #[serde(default)]
+        max_speed: f32,
+        #[serde(default)]
+        range_limit: f32,
+    },
     /// Dropped from a flyer: falls straight down from the flyer's altitude.
     Bomb { fall_speed: f32 },
     /// Bouncing ball (Desert Fly bombs, Flying Machine gobstoppers): lobbed, bounces `bounces`
@@ -110,6 +121,8 @@ pub struct WeaponDef {
     /// Unit that grows where the shot lands, if that spot is free open ground (the seeds thrown by
     /// Seed Balls and Spawn Moths).
     pub spawn: Option<String>,
+    /// Trail the projectile leaves (render hook: "smoke" = the original's SMOKEPUFF puffs).
+    pub trail: String,
     pub source: String,
 }
 
@@ -135,6 +148,7 @@ impl Default for WeaponDef {
             impact_sound: String::new(),
             friendly_fire: false,
             spawn: None,
+            trail: String::new(),
             source: String::new(),
         }
     }
@@ -258,6 +272,10 @@ pub struct UnitDef {
     /// Length of the attack animation in seconds (the sim re-triggers it per shot).
     pub attack_anim_time: f32,
     pub death_time: f32,
+    /// Where its shots leave from, relative to the unit on the ground: x to its right, y up, z
+    /// ahead, in cells (the Assault wasp fires from the abdomen curled under its body, the Missile
+    /// spider from the launcher on its back). None = just in front of its head.
+    pub muzzle: Option<Vec3>,
     /// Neutral creep plant behaviour; None for everything that is not a plant.
     pub plant: Option<PlantDef>,
     /// Neutral flyer bombing pattern; None drops the weapon once per reload.
@@ -296,6 +314,7 @@ impl Default for UnitDef {
             model_scale: 1.0,
             attack_anim_time: 0.4,
             death_time: 1.2,
+            muzzle: None,
             plant: None,
             flyer: None,
             death_weapon: None,

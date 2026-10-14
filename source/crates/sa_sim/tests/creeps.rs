@@ -278,3 +278,43 @@ fn creep_pools_keep_the_level_stocked_up_to_its_count() {
     }
     assert_eq!(most, 1);
 }
+
+#[test]
+fn missile_spider_rockets_chase_a_moving_target_round_and_hit() {
+    let mut w = meadow();
+    let spider = kind(&w, "spider_missile");
+    let soldier = kind(&w, "ant_soldier");
+    let s = w.spawn_unit(spider, 1, Vec2::new(5.5, 12.5), std::f32::consts::FRAC_PI_2);
+    // a target running across the line of fire
+    let t = w.spawn_unit(soldier, 0, Vec2::new(14.5, 6.5), 0.0);
+    w.issue_uncontrolled(t, Order::Move(Vec2::new(14.5, 36.0)));
+    w.issue(&[s], Order::Attack(Target::Unit(t)));
+    let mw = w.defs.weapon("spider_missile").unwrap();
+    let full = w.defs.units[soldier as usize].hp;
+    let mut tracked: Option<u32> = None;
+    let mut top_speed = 0.0f32;
+    let mut turned = 0.0f32;
+    let mut last_heading: Option<f32> = None;
+    for _ in 0..(30 * 10) {
+        w.step();
+        if tracked.is_none() {
+            tracked = w.projectiles.iter().find(|p| p.weapon == mw).map(|p| p.id);
+        }
+        if let Some(id) = tracked {
+            match w.projectiles.iter().find(|p| p.id == id) {
+                Some(p) => {
+                    top_speed = top_speed.max(p.speed);
+                    if let Some(h) = last_heading {
+                        turned += angle_diff(h, p.heading).abs();
+                    }
+                    last_heading = Some(p.heading);
+                }
+                None => break, // it went off
+            }
+        }
+    }
+    assert!(tracked.is_some(), "the spider fired");
+    assert!(top_speed <= 8.5 + 1e-3 && top_speed > 6.0, "rocket top speed {top_speed}");
+    assert!(turned > 0.5, "the rocket curves after its moving target (turned {turned} rad)");
+    assert!(w.unit(t).is_none_or(|u| u.hp < full), "the rocket hit the moving target");
+}
