@@ -96,7 +96,8 @@ fn seeds_wither_in_ten_seconds_and_some_become_seed_balls() {
     let a = w.spawn_unit(soldier, 1, Vec2::new(2.5, 1.5), 0.0);
     w.issue(&[a], Order::Attack(Target::Unit(s)));
     w.run(30);
-    assert!(w.unit(s).unwrap().hp > 40000.0, "seeds take no damage");
+    let seed_hp = w.defs.units[seed as usize].hp;
+    assert!(w.unit(s).unwrap().hp > seed_hp * 0.8, "seeds take no damage");
     assert_ne!(w.unit(a).unwrap().target, Some(Target::Unit(s)), "seeds are not targetable (the soldier may pick another target)");
 }
 
@@ -139,7 +140,8 @@ fn hurt_plants_go_quiet_and_heal() {
     w.run(60);
     assert_eq!(weapon_shots(&w, "plant_popcorn"), 0, "below half health a plant does not attack");
     let hp = w.unit(pop).unwrap().hp;
-    assert!((hp - (max * 0.3 + 250.0 * 2.0)).abs() < 30.0, "heals 250 HP per second, got {hp}");
+    let regen = w.defs.units[kind(&w, "plant_popcorn") as usize].plant.as_ref().unwrap().regen_per_s;
+    assert!((hp - (max * 0.3 + regen * 2.0)).abs() < regen * 0.2 + 0.01, "heals {regen} a second (the original's 8), got {hp}");
     // a growing plant does not attack either
     let mut w = meadow();
     let k = kind(&w, "plant_thorn");
@@ -164,11 +166,12 @@ fn death_lollies_blow_up_when_approached() {
     let victim_hp = w.unit(victim).unwrap().hp;
     w.run(3);
     assert!(!w.unit(a).unwrap().alive(), "lolly a goes off");
+    let blast = w.defs.weapons[w.defs.weapon("plant_lolly_blast").unwrap() as usize].damage;
     let hp_b = w.unit(b).unwrap().hp;
-    assert!(w.unit(b).unwrap().alive() && hp_b < full - 4000.0, "its blast (4500 within 3 cells) hurts lolly b without killing it: {hp_b}");
+    assert!(w.unit(b).unwrap().alive() && hp_b <= full - blast * 0.9, "its blast ({blast} within 3 cells) hurts lolly b without killing it: {hp_b}");
     assert_eq!(w.unit(far).unwrap().hp, full, "a lolly far away is untouched");
     let left = w.unit(victim).map(|u| if u.alive() { u.hp } else { 0.0 }).unwrap();
-    assert!(left <= victim_hp - 4499.0 || left == 0.0, "4500 damage to everything within 3 cells");
+    assert!(left <= victim_hp - blast + 0.5 || left == 0.0, "{blast} damage to everything within 3 cells");
 }
 
 #[test]

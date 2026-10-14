@@ -197,7 +197,9 @@ pub struct PlantDef {
 
 impl Default for PlantDef {
     fn default() -> Self {
-        Self { grow_time: 5.0, attack: PlantAttack::Aimed, injured_below: 0.5, regen_per_s: 250.0, decay_per_s: 0.0, targetable: true, blocks: true }
+        // the original's plants heal 8 a second (Thorn Bush and Choc Freckle +2 every 250 ms, Death Lolly +4
+        // every 500 ms: FUN_0040a590, FUN_00408610, FUN_00408dd0)
+        Self { grow_time: 5.0, attack: PlantAttack::Aimed, injured_below: 0.5, regen_per_s: 8.0, decay_per_s: 0.0, targetable: true, blocks: true }
     }
 }
 

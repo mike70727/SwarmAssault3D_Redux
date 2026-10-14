@@ -109,11 +109,63 @@ against the original program):
     - Flying Machine: two bouncing gobstoppers 8.5 cells behind every 0.84 s; shot down over land,
       its pilot (a pirate grenadier) carries on.
 
+## Health, damage and range: the original program's own values (2026-10-14)
+
+Mike: "I want the range and damage to be the same as the base game. For the creatures and the turrets
+on the buildings." The original program (`Swarm Assault.exe` of the player's copy, read as data and
+decompiled with Ghidra 12.1.2; never run) keeps them in code, not in a data file:
+
+* every creature has a routine that calls the damage routine `FUN_0041afb0(world, unit, damage, MAX
+  HEALTH, ...)` (flyers `FUN_0041b8a0`) and starts its attacks with `FUN_004264f0(world, unit, target,
+  RANGE)` (range in cells);
+* a projectile that reaches its target turns into a damage actor (type 90000) carrying its DAMAGE in
+  field 0x2c; bites send message 0x82 with the damage as its value;
+* a colony starts at field 0xdb = health and heals +n every 500 ms while it is not breeding; its
+  turrets test `FUN_00428da0(..., RANGE, 1)` and fire one of the creature weapons.
+
+| Creature | Health | Range | Damage per hit |
+|---|---|---|---|
+| Ant Soldier | 100 | 1 | bite 4 |
+| Ant Grenadier | 80 | 6 | grenade 30 |
+| Ant Bazooka | 140 | 9 | rocket 40 |
+| Lady Bug | 150 | 6 | minigun 8 |
+| Shrapnel Beetle | 400 | 4 | 8 fragments of 15 |
+| Cannon Beetle | 150 | 14 | cannon 40 |
+| Black Widow | 300 | 1 | bite 8 |
+| Spider Sniper | 120 | 14 | 30 |
+| Missile Spider | 250 | 18 | homing missile 60 |
+| Savage Scorpion | 350 | 1 | sting 12 |
+| Spear Gun Scorpion | 170 | 15 | spear 30 |
+| Ninja Scorpion | 250 | 12 | star 50 |
+| Assault Wasp | 100 | 10 | gun 8 |
+| Paralysis Wasp | 200 | 15 | paralysis for 8 s, no damage |
+| Sonic Wasp | 300 | 8 | 20 |
+| Bull Ant | 200 | 1 | bite 6 |
+| Pirate Grenadier | 160 | 6 | grenade 30 |
+| Dragonfly / Desert Fly / Spawn Moth / Flying Machine | 1200 / 600 / 600 / 500 | | brake bomb 160 / bouncing bomb 80 / puffball 15 / gobstopper 40 |
+| Popcorn Plant / Thorn Bush / Seed Ball / Choc Freckle / Death Lolly | 600 / 500 / 100 / 700 / 200 | | whip 5 / thorn 20 / puffball 15 / freckle 15 / blast 80; plants heal 8 a second |
+
+| Colony | Health | Heals while not breeding | Turret | Turret range |
+|---|---|---|---|---|
+| Ant | 2500 | 20 / s | machine gun 8 (the minigun round) | 10 |
+| Beetle | 3500 | 24 / s | cannon 40 | 10 |
+| Spider | 4000 | 28 / s | sniper 30 | 14 |
+| Scorpion | 4500 | 30 / s | two spears of 30 | 18 |
+| Wasp | 5000 | 32 / s | the Assault Wasp's chain gun, 8 (CHAINGUN sound; the ant turret's is TURRETMACHINEGUN) | 10 |
+
+OpenSA's ranges were already the original's (except the Shrapnel Beetle: 3, the original 4); its
+health and damage were about 50 times the original's with drifting ratios (Shrapnel Beetle 3.8 soldiers
+of health instead of 4, colonies 100 000 each instead of 2500-5000). `tools/apply_original_stats.py`
+writes the values above into `units.ron` and `colonies.ron`, noting the routine for each. The original's
+turrets cannot be hit (they fall with their colony); our standalone level turrets, boosters and tesla coil
+have no original counterpart and keep OpenSA's values scaled by the colonies' ratio (1/40). Reload times
+are OpenSA's (they follow the original's attack animation timings) and speeds are unchanged.
+
 ## Assumptions / provisional behaviour (clearly labelled in code and data)
 
-A1. **Statistic values** (HP, speed, damage, range, reload, build time) are taken from OpenSA and
-    converted to cells/seconds. They are *not* verified against the original. They can be edited in
-    `assets/data/units.ron` and `assets/data/colonies.ron`.
+A1. **Statistic values**: health, damage and range are the original's (above). Speed, reload and build
+    time are taken from OpenSA and converted to cells/seconds; they are not verified against the
+    original. They can be edited in `assets/data/units.ron` and `assets/data/colonies.ron`.
 A2. **Continuous breeding**: the original game (as remembered from descriptions) lets a colony breed a
     chosen unit type continuously. We implement "breed the selected type repeatedly while below the
     per-team unit cap". OpenSA uses a click-to-queue model; the original UI is not verifiable here.

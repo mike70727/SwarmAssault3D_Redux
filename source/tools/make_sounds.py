@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Synthesises the game's sound effects (own work; the original's audio is not redistributable).
 Writes assets/audio/<id>.ogg for every hook id in docs/AUDIO_HOOKS.md (WAV when ffmpeg is missing).
-Requires numpy; uses ffmpeg (libvorbis) when available."""
+Requires numpy; uses ffmpeg (libvorbis) when available.  Usage: make_sounds.py [id ...] (default: all;
+the noise is seeded and every sound draws in list order, so new sounds go at the end of the list)."""
 import math
 import os
 import shutil
 import struct
 import subprocess
+import sys
 import wave
 
 import numpy as np
 
 SR = 44100
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets", "audio")
+HERE = os.path.dirname(os.path.abspath(__file__))
+# the package keeps assets beside source/ (source/tools/../../assets); a plain checkout of the cloud
+# layout had tools/ beside assets/
+OUT = next((d for d in (os.path.join(HERE, "..", "..", "assets", "audio"), os.path.join(HERE, "..", "assets", "audio"))
+            if os.path.isdir(os.path.dirname(d))), os.path.join(HERE, "..", "assets", "audio"))
 os.makedirs(OUT, exist_ok=True)
 rng = np.random.default_rng(12345)
 
@@ -220,8 +226,14 @@ sounds["unit_ready"] = chord_notes([660, 990], 0.12, 0.3)
 sounds["victory"] = soft(chord_notes([523.25, 659.25, 783.99, 1046.5], 0.28, 1.2), 1.1)
 sounds["defeat"] = soft(mix(chord_notes([440, 349.23, 293.66, 277.18], 0.45, 1.0, wave_fn=saw) * 0.5, sine(55, 2.8) * env_adsr(2.8, 0.1, 0.3, 0.7, 0.8) * 0.6), 1.2)
 sounds["ui_click"] = mix(highpass(noise(0.06), 2000) * env_exp(0.06, 0.008), sine(1500, 0.06) * env_exp(0.06, 0.012) * 0.6)
+# added later (kept at the end so the sounds above keep their noise): the wasp colony's chain gun
+# (the original's CHAINGUN; the ant colony's turret is a plain machine gun, turret_mg)
+sounds["chaingun"] = soft(mix(gun_pop(0.12, 1900, 120), bandpass(noise(0.12), 2500, 6000) * env_exp(0.12, 0.03) * 0.5,
+                              square(sweep(900, 700, 0.12), 0.12) * env_exp(0.12, 0.04) * 0.15), 1.8)
 
+wanted = set(sys.argv[1:])
 written = []
 for name, sig in sounds.items():
-    written.append(os.path.basename(write(name, sig)))
+    if not wanted or name in wanted:
+        written.append(os.path.basename(write(name, sig)))
 print(len(written), "sounds:", " ".join(sorted(written)))

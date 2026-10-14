@@ -128,7 +128,8 @@ fn colony_capture_flow_bits_and_ownership() {
         w.unit_mut(*id).unwrap().pos = cpos + Vec2::new(-5.0, (i as f32 - 4.0) * 0.9);
     }
     // bring the colony to the brink and let the soldiers finish it (provisional map rule)
-    w.colonies[red_colony as usize].hp = 2000.0;
+    let max = w.colony_def(&w.colonies[red_colony as usize]).hp;
+    w.colonies[red_colony as usize].hp = max * 0.02;
     w.issue(&yellow, Order::Attack(Target::Colony(red_colony)));
     let mut defeated = false;
     let mut scattered = false;
@@ -159,7 +160,7 @@ fn colony_capture_flow_bits_and_ownership() {
     let c = &w.colonies[red_colony as usize];
     assert_eq!(c.team, 1);
     assert!(c.active());
-    assert!((c.hp - 25000.0).abs() < 1.0, "resurrect HP should be 25%: {}", c.hp);
+    assert!((c.hp - max * 0.25).abs() < 0.01, "resurrect HP should be 25% of {max}: {}", c.hp);
 }
 
 #[test]
@@ -305,7 +306,7 @@ fn five_families_map_runs_with_flyers_pirates_and_ranged_capture() {
         let kind = if i % 3 == 0 { baz } else { gren };
         army.push(w.spawn_unit(kind, 1, bpos + Vec2::new(10.0 + (i % 6) as f32, -3.0 + (i / 6) as f32), 0.0));
     }
-    w.colonies[beetle as usize].hp = 30000.0; // keep the test short
+    w.colonies[beetle as usize].hp = w.colony_def(&w.colonies[beetle as usize]).hp * 0.3; // keep the test short
     w.issue(&army, Order::Attack(Target::Colony(beetle)));
     let soldier = w.defs.unit("ant_soldier").unwrap();
     let s = w.spawn_unit(soldier, 1, bpos + Vec2::new(8.0, 0.0), 0.0);
