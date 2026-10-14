@@ -1,8 +1,8 @@
 # Gameplay research: verified mechanics vs. assumptions
 
 Research date: 2026-10-13. The original game is *Swarm Assault* (Gee Whiz! Entertainment, 1999).
-No copy of the original executable or its data files is available in this environment, so nothing
-below was measured in the original game itself.
+Items 1-14 come from the OpenSA re-implementation. Items 15-17 were later checked against the
+player's own copy of the original game files (read as data; the original program was never run).
 
 ## Sources actually consulted
 
@@ -12,10 +12,11 @@ below was measured in the original game itself.
 | OpenSA (OpenRA mod re-creating Swarm Assault), git clone of commit `b61363d9` (2023-09-29), `mods/sa/rules`, `weapons`, `sequences`, `OpenRA.Mods.OpenSA/Traits` | read in full for ants, colonies, creeps; skimmed for the rest | unit/colony statistics as re-implemented by OpenSA, colony capture logic (source code), victory logic (source code), sprite sequence layout |
 | swarm-assault.fandom.com wiki | **blocked** by the proxy (403) | nothing |
 | mobygames.com screenshots | **blocked** (also noted as blocked in the pack) | nothing |
-| Gameplay footage (YouTube etc.) | **not reachable** from this environment | nothing |
+| Gameplay footage: YouTube uJoW0Qqd1Zk (campaign levels 1-10), frames in `reference/video` | watched | start-up, menus, loading screens, the in-game / game-over menu layout, sidebar, health bars |
+| The player's copy of the original (Game.DDF/ANI/SDF, the level files, Text\English.txt, the program's strings) | read as data | creep roster, per-level creep counts, sprites, sounds, portraits, menu pictures and text |
 
-Because the wiki and footage could not be reached, the main source of mechanics is the OpenSA
-re-implementation. OpenSA is a fan project; its numbers are its authors' reconstruction and may have
+Because the wiki could not be reached and the original program is never run here (the footage shows
+the screens, not the numbers), the main source of mechanics is the OpenSA re-implementation. OpenSA is a fan project; its numbers are its authors' reconstruction and may have
 been tuned. Every statistic in `assets/data/units.ron` and `assets/data/colonies.ron` is therefore
 tagged `source: "opensa"` and must not be described as original Swarm Assault data.
 
@@ -65,6 +66,48 @@ at the default game speed; tile size 24x24 px. Our data files convert these into
     bombs that split; Spawn Moth drops puffs and seeds; Flying Machine drops gobstoppers and spawns a
     pirate grenadier pilot when shot down over land. They fly across the map and cannot be controlled.
 14. **Pirate ants** spawn from ant holes in groups of 1..6 (45% bull ant, 45% grenadier, 10% bazooka).
+
+## Neutral creeps: checked against the player's own copy of the original (2026-10-13)
+
+Read from the original files (nothing executed, nothing copied into the package):
+
+15. **The roster** (`Text\English.txt`): Bull Ant, Grenadier, Dragonfly, Desert Fly, Flying Machine,
+    Choc Freckle, Death Lolly, Spawn Moth, Popcorn Plant, Seed Ball, Thorn Bush. OpenSA's Venus
+    Flytrap, Gumnut and Poison Mushroom are not in it (the original's mushrooms, gumnuts and
+    flowers are scenery), so this recreation leaves them out.
+16. **Per-level creep counts**: every original level carries a row of "Misc" actors outside the
+    playing area (the program's names: MiscWhipPlant 143, MiscDragonfly 101, MiscThornbush 157,
+    MiscBigFly 161, MiscPuffball 169, MiscMoth 171, MiscFreckle 172, MiscLollyBomb 176,
+    MiscFlyingMachine 180, MiscAntHole 147). Their number is how many of that creep the level has,
+    e.g. "Bomber Paradise" 15 dragonflies, "Thorny Issue" 40 thorn bushes, "Weeds" 10 seed balls,
+    "Rain" 30 flying machines; level 1 has none. `tools/add_creep_pools.py` writes the counts into
+    each map's `rules.creeps`; a dead plant regrows elsewhere and a flyer makes another pass, so the
+    level keeps up to that many (the spawn intervals are OpenSA's, which were tuned to these counts).
+17. **Sprites, sounds and portraits** exist for each creep (OBWHIPPL, OBPUFFBL, OBTHORNB, FRECKLE,
+    OBLOLLY*; WHIPFIRE, PUFFBALLSPAWN, FRECKLEFIRE, BOMBERBUZZ, FLYBUZZ, MOTHFLUTTER,
+    FLYINGMACHINE; COLONYNEUTRAL*3D, NAMENEUTRAL*), and the game uses them.
+
+Behaviour from OpenSA's creep-plants.yaml / creep-units.yaml and its C# traits (not verified
+against the original program):
+
+18. **Plants** grow for 4-5 s before they can attack, stop attacking below half health
+    (OpenSA "injured") and heal 250 HP/s, and occupy their cell.
+    - Popcorn Plant: eight homing pellets fired out in every direction at once (AttackRadial), range 6.
+    - Thorn Bush: thorns at the nearest enemy, range 6.
+    - Seed Ball: while an enemy creature or colony is within 5 cells it splits open every 0.8 s and
+      throws six exploding puffs at random spots within 5 cells, plus one seed. A seed withers after
+      10 s; one in five becomes a new Seed Ball.
+    - Choc Freckle: three lobbed shots aimed round a circle that turns 211 degrees per second
+      (AttackVortex), range 3.
+    - Death Lolly: blows up (4500 damage to everything within 3 cells) when an enemy creature or
+      colony comes within 2 cells, or when killed.
+19. **Flyers** cross the map through a random cell on one of eight headings.
+    - Dragonfly: brake bombs alternately to its right and left about every 0.4 s for 3.2 s, then a
+      1.2 s rest. Each bomb lands about 1.1 cells behind and 1.1 to the side: 8500 damage.
+    - Desert Fly: a pair of bouncing bombs every 2.5 s that split into four.
+    - Spawn Moth: five puffs and a seed thrown 5 cells behind every 0.84 s.
+    - Flying Machine: two bouncing gobstoppers 8.5 cells behind every 0.84 s; shot down over land,
+      its pilot (a pirate grenadier) carries on.
 
 ## Assumptions / provisional behaviour (clearly labelled in code and data)
 
