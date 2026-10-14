@@ -121,8 +121,14 @@ fn colony_capture_flow_bits_and_ownership() {
     for id in red {
         w.unit_mut(id).unwrap().hp = 0.0;
     }
-    // stop red from breeding so the test is deterministic
+    // stop red from breeding so the test is deterministic, and its colony from healing meanwhile
+    // (the original heals a colony only while it does not breed; a few biters at the front of the
+    // queue could not outpace that under the turrets' fire)
     w.set_production(red_colony, None);
+    let def = w.colonies[red_colony as usize].def as usize;
+    w.defs.colonies[def].regen_per_s = 0.0;
+    // the turrets pick off the soldiers queueing at the wall; this test is about the bits after
+    w.cheats.invincible = Some(1);
     let yellow: Vec<UnitId> = w.living_units().filter(|u| u.team == 1).map(|u| u.id).collect();
     for (i, id) in yellow.iter().enumerate() {
         w.unit_mut(*id).unwrap().pos = cpos + Vec2::new(-5.0, (i as f32 - 4.0) * 0.9);
@@ -136,6 +142,10 @@ fn colony_capture_flow_bits_and_ownership() {
     let mut picked = 0;
     let mut captured: Option<u8> = None;
     for _ in 0..30 * 120 {
+        // red's bot would switch breeding back on while yellow's soldiers queue at the wall
+        if w.colonies[red_colony as usize].team == 2 {
+            w.set_production(red_colony, None);
+        }
         w.step();
         for e in w.drain_events() {
             match e {
@@ -250,17 +260,24 @@ fn save_and_load_round_trip_is_deterministic() {
 }
 
 #[test]
-fn massed_soldiers_can_crack_and_capture_a_colony_under_the_stage2_rule() {
-    // The Stage 2 map allows melee units to hurt colonies (PROVISIONAL rule A6). A full-cap push of
-    // 40 soldiers must be able to bring a turret-defended colony down and take it over.
+fn melee_bugs_bite_a_colony_single_file_and_can_bring_it_down() {
+    // In the original, melee bugs walk up to a colony and bite it from one stretch of wall, so an
+    // attack forms a line (FUN_00402e90 "mode 20"; Mike: "they all lined up in a straight line").
+    // 40 soldiers that the turrets cannot kill (invincible cheat) must bring the colony down that
+    // way, with never more than the front of the line biting at once (taking it over afterwards is
+    // `colony_capture_flow_bits_and_ownership`).
     let mut w = world();
     let red_colony = w.colonies.iter().find(|c| c.team == 2).unwrap().id;
     let cpos = w.colonies[red_colony as usize].pos;
     w.set_production(red_colony, None);
+    // an enemy colony normally breeds, and the original heals a colony only while it does not
+    let def = w.colonies[red_colony as usize].def as usize;
+    w.defs.colonies[def].regen_per_s = 0.0;
     let red: Vec<UnitId> = w.living_units().filter(|u| u.team == 2).map(|u| u.id).collect();
     for id in red {
         w.unit_mut(id).unwrap().hp = 0.0;
     }
+    w.cheats.invincible = Some(1);
     let soldier = w.defs.unit("ant_soldier").unwrap();
     let mut army = Vec::new();
     for i in 0..40 {
@@ -268,21 +285,36 @@ fn massed_soldiers_can_crack_and_capture_a_colony_under_the_stage2_rule() {
         army.push(w.spawn_unit(soldier, 1, p, 0.0));
     }
     w.issue(&army, Order::Attack(Target::Colony(red_colony)));
-    let mut captured = None;
-    for _ in 0..30 * 240 {
+    let mut defeated = false;
+    let mut most_biting = 0;
+    let mut widest = 0.0f32;
+    for _ in 0..30 * 300 {
         w.step();
-        for e in w.drain_events() {
-            if let SimEvent::ColonyCaptured { colony, team } = e
-                && colony == red_colony
-            {
-                captured = Some(team);
+        let biters: Vec<Vec2> = army
+            .iter()
+            .filter_map(|id| w.unit(*id))
+            .filter(|u| u.anim == Anim::Attack && u.target == Some(Target::Colony(red_colony)))
+            .map(|u| u.pos)
+            .collect();
+        most_biting = most_biting.max(biters.len());
+        for a in &biters {
+            for b in &biters {
+                widest = widest.max(a.distance(*b));
             }
         }
-        if captured.is_some() {
+        for e in w.drain_events() {
+            if e == SimEvent::ColonyDefeated(red_colony) {
+                defeated = true;
+            }
+        }
+        if defeated {
             break;
         }
     }
-    assert_eq!(captured, Some(1), "40 soldiers could not capture the colony (survivors: {})", w.team_count(1));
+    assert!(most_biting >= 2, "the front of the line should bite side by side (at most {most_biting} bit)");
+    assert!(most_biting <= 4, "{most_biting} soldiers bit at once: they surrounded the colony instead of lining up");
+    assert!(widest <= 2.5, "biters {widest} cells apart: not from one spot");
+    assert!(defeated, "40 soldiers biting single file could not bring the colony down");
 }
 
 #[test]

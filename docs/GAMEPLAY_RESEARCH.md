@@ -31,8 +31,15 @@ at the default game speed; tile size 24x24 px. Our data files convert these into
 2. **Neutral creatures**: Bull Ant and Pirate Grenadier (pirate ants spawned from ant holes),
    plus four neutral flyers that cannot be ordered (Dragonfly, Desert Fly, Spawn Moth, Flying Machine),
    each tied to a tileset (normal / desert / swamp / candy).
-3. **Melee units cannot damage colonies**: Ant Soldier, Spider Black Widow and Scorpion Savage have
-   `InvalidTargets: Colony`; their description says "Cannot harm colonies or creep flyers".
+3. **Melee bugs attack colonies single file** (corrected 2026-10-14; OpenSA's
+   `InvalidTargets: Colony` and its "Cannot harm colonies" description are OpenSA's own, not the
+   original's). In the original program the four biters (Ant Soldier FUN_00402e90, Bull Ant
+   FUN_004073a0, Savage Scorpion FUN_0040bcd0, Black Widow FUN_0040e8f0) handle an attack order on
+   a colony (type flag 0xffff, set by every colony's start-up routine) by walking to it in their
+   "mode 20" instead of spreading round it, so an attack forms a line at one stretch of wall that
+   the turrets pick off one by one (Mike, from playing it: "they all lined up in a straight line").
+   Ours: each team's melee bugs share one spot per colony (`World::siege_slot`): the three nearest
+   bite side by side, the rest wait in a straight line behind and step up as the front falls.
 4. **Colonies have automatic turrets** that fire at enemy ground units (and air) in range and never
    at colonies. Turret count per family in OpenSA: Ant 2, Beetle 1, Spider 2, Scorpion 1 (two barrels),
    Wasp 1. Turrets rotate (16 facings in the sprites) and have a 2-frame firing animation.
@@ -173,9 +180,9 @@ A3. **Unit cap**: OpenSA has none that we found; we add a configurable cap (defa
     keep battles bounded. Provisional.
 A4. **Colony bit pickup radius** is 0.6 cells (OpenRA crushing semantics use cell occupancy). Provisional.
 A5. **Bit expiry ownership**: expired bits count for neutral exactly as in OpenSA.
-A6. **Stage 2/3 demo map flag** `melee_can_damage_colonies: true` lets Ant Soldiers damage colonies so
-    that the two-army Ant Soldier battle can actually end in a capture. This *contradicts* verified
-    item 3 and is off by default on every other map; the flag is labelled PROVISIONAL in the map file.
+A6. **Map flag** `melee_can_damage_colonies` (the Stage 2/3 demo maps set it) is no longer needed:
+    melee weapons may target colonies everywhere since 2026-10-14 (item 3). The flag still lets any
+    other weapon without `colony: true` hurt colonies on the maps that set it.
 A7. **AI**: the original AI behaviour is unknown; ours is a simple "breed, group, attack nearest,
     defend, collect bits" bot. Not claimed to be original.
 A8. **Unit dimensions**: an Ant Soldier sprite is about 40 px long in a 24 px tile, so a soldier is

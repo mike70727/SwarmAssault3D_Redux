@@ -326,7 +326,39 @@ pub struct World {
     /// Cheat switches (console).
     #[serde(default)]
     pub cheats: Cheats,
+    /// The spot each team's melee bugs bite each colony from (`siege_point`).
+    #[serde(default)]
+    sieges: Vec<Siege>,
 }
+
+/// One team's melee bugs attacking one colony.  The original's biters (Ant Soldier, Bull Ant,
+/// Black Widow, Savage Scorpion; FUN_00402e90 and kin) walk up to a colony and stop at its wall
+/// instead of spreading round it, so an attack forms a line that the turrets pick off one by one
+/// (Mike, 2026-10-14: "they all lined up in a straight line").  The first biter to come picks the
+/// stretch of wall nearest to it (`point`, just outside the wall; `out` points away from it); the
+/// three nearest bugs bite from there, side by side, and the rest wait in a straight line behind
+/// them, stepping up as the front falls.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Siege {
+    colony: u32,
+    team: u8,
+    point: Vec2,
+    out: Vec2,
+    /// The queue, nearest the wall first (re-sorted every tick).
+    members: Vec<UnitId>,
+    last_used: f64,
+}
+
+/// Bugs at the front of a siege queue (they bite); the rest line up.
+const SIEGE_FRONT: usize = 3;
+/// Spacing of the biters side by side along the wall, and of the bugs waiting in line behind them
+/// (a body length: an Ant Soldier is about 1.5 cells long, a Black Widow wider still).
+const SIEGE_SPACING: f32 = 1.1;
+const SIEGE_LINE_GAP: f32 = 1.6;
+/// How near its place in the queue a front bug must be to bite.
+const SIEGE_REACH: f32 = 0.7;
+/// A siege nobody has used for this long is forgotten (the next attack picks a new spot).
+const SIEGE_FORGET_S: f64 = 3.0;
 
 /// Cheat switches set from the in-game console; saved with the game.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -433,6 +465,7 @@ impl World {
             defs,
             map,
             cheats: Cheats::default(),
+            sieges: Vec::new(),
         };
         let colonies = w.map.colonies.clone();
         for cs in &colonies {
@@ -869,6 +902,56 @@ impl World {
         }
     }
 
+    /// `unit`'s place in its team's queue at `colony` (see `Siege`): where to stand, and whether it
+    /// is at the front (may bite).  The first bug to come picks the stretch of wall nearest to it.
+    fn siege_slot(&mut self, colony: u32, team: u8, unit: UnitId, from: Vec2) -> (Vec2, bool) {
+        let now = self.time;
+        let k = match self.sieges.iter().position(|s| s.colony == colony && s.team == team) {
+            Some(k) => k,
+            None => {
+                let col = &self.colonies[colony as usize];
+                let h = Vec2::splat(self.defs.colonies[col.def as usize].half_extent);
+                let edge = from.clamp(col.pos - h, col.pos + h);
+                let out = (from - edge).try_normalize().or_else(|| (from - col.pos).try_normalize()).unwrap_or(Vec2::Y);
+                let point = self.grid.nearest_free(edge + out * 0.6);
+                self.sieges.push(Siege { colony, team, point, out, members: Vec::new(), last_used: now });
+                self.sieges.len() - 1
+            }
+        };
+        let s = &mut self.sieges[k];
+        s.last_used = now;
+        let rank = match s.members.iter().position(|m| *m == unit) {
+            Some(r) => r,
+            None => {
+                s.members.push(unit);
+                s.members.len() - 1
+            }
+        };
+        let side = Vec2::new(-s.out.y, s.out.x);
+        let (spot, front) = match rank {
+            0 => (s.point, true),
+            1 => (s.point + side * SIEGE_SPACING, true),
+            2 => (s.point - side * SIEGE_SPACING, true),
+            r => (s.point + s.out * (SIEGE_LINE_GAP * (r + 1 - SIEGE_FRONT) as f32), false),
+        };
+        (self.grid.nearest_free(spot), front)
+    }
+
+    /// Keep every siege queue current: forget unused ones, drop bugs that died or turned to
+    /// another target, and put the nearest to the wall at the front.
+    fn update_sieges(&mut self) {
+        let now = self.time;
+        self.sieges.retain(|s| now - s.last_used < SIEGE_FORGET_S);
+        for k in 0..self.sieges.len() {
+            let (c, point) = (self.sieges[k].colony, self.sieges[k].point);
+            let mut members = std::mem::take(&mut self.sieges[k].members);
+            members.retain(|id| self.unit(*id).is_some_and(|u| u.alive() && u.target == Some(Target::Colony(c))));
+            let dist = |id: &UnitId| self.unit(*id).map_or(f32::INFINITY, |u| u.pos.distance(point));
+            members.sort_by(|a, b| dist(a).total_cmp(&dist(b)).then(a.idx.cmp(&b.idx)));
+            self.sieges[k].members = members;
+        }
+    }
+
     /// Distance from `pos` to the edge of a target.
     fn edge_distance(&self, pos: Vec2, t: Target) -> f32 {
         match t {
@@ -885,6 +968,7 @@ impl World {
     // units
     // -----------------------------------------------------------------------------------------
     fn update_units(&mut self, dt: f32) {
+        self.update_sieges();
         let n = self.units.len();
         let mut hits: Vec<Hit> = Vec::new();
         let mut spawned_projectiles: Vec<Projectile> = Vec::new();
@@ -973,7 +1057,12 @@ impl World {
             if let (Some(t), Some(w)) = (target, &weapon) {
                 let tp = self.target_pos(t).unwrap_or(pos);
                 let dist = self.edge_distance(pos, t);
-                let in_range = dist <= w.range && dist >= w.min_range;
+                // a biter reaches a colony only from the front of its team's queue (`Siege`)
+                let siege = match t {
+                    Target::Colony(c) if def.melee => Some(self.siege_slot(c, team, id, pos)),
+                    _ => None,
+                };
+                let in_range = dist <= w.range && dist >= w.min_range && siege.is_none_or(|(spot, front)| front && pos.distance(spot) <= SIEGE_REACH);
                 let visible = def.flying || self.grid.los(pos, self.sight_point(pos, t, tp)) || matches!(t, Target::Colony(_)) && dist < 2.0;
                 if in_range && (visible || matches!(w.projectile, ProjectileKind::Bullet { arc, .. } if arc > 0.05)) {
                     attack_now = true;
@@ -1003,7 +1092,7 @@ impl World {
                         u.order = Order::Move(back);
                         goal = Some(back);
                     } else {
-                        goal = Some(tp);
+                        goal = Some(siege.map_or(tp, |(spot, _)| spot));
                     }
                 }
             } else {

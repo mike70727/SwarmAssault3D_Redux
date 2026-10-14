@@ -12,7 +12,7 @@
         // ---------------------------------------------------------------- ants
         "ant_bite": (
             name: "Bite", range: 1.0, reload: 0.32, damage: 4.0, spread: 0.0,
-            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            projectile: Instant, targets: (ground: true, air: false, colony: true),
             fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
             source: "opensa ants_light: Range 1c512, ReloadDelay 8, Damage 300, InvalidTargets Colony; ORIGINAL VALUES: original: Ant Soldier FUN_00402e90 bites with message 0x82 value 4, attack range 1",
         ),
@@ -53,7 +53,7 @@
         // ------------------------------------------------------------- spiders
         "spider_bite": (
             name: "Bite", range: 1.0, reload: 0.32, damage: 8.0, spread: 0.0,
-            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            projectile: Instant, targets: (ground: true, air: false, colony: true),
             fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
             source: "opensa spiders_light: Range 1c512, ReloadDelay 8, Damage 550, InvalidTargets Colony; ORIGINAL VALUES: original: Black Widow FUN_0040e8f0 bites with message 0x82 value 8, range 1",
         ),
@@ -72,7 +72,7 @@
         // ----------------------------------------------------------- scorpions
         "scorpion_sting": (
             name: "Sting", range: 1.0, reload: 0.32, damage: 12.0, spread: 0.0,
-            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            projectile: Instant, targets: (ground: true, air: false, colony: true),
             fire_delay: 0.15, effect: "bite", fire_sound: "savage_attack",
             source: "opensa scorpions_light: Range 1c512, ReloadDelay 8, Damage 715, InvalidTargets Colony; ORIGINAL VALUES: original: Savage Scorpion FUN_0040bcd0 stings with message 0x82 value 12, range 1",
         ),
@@ -114,7 +114,7 @@
         // -------------------------------------------------------------- creeps
         "bull_bite": (
             name: "Bite", range: 1.0, reload: 0.32, damage: 6.0, spread: 0.0,
-            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            projectile: Instant, targets: (ground: true, air: false, colony: true),
             fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
             source: "opensa ant_bull_pirate: Range 1c0, ReloadDelay 8, Damage 200; ORIGINAL VALUES: original: Bull Ant FUN_004073a0 bites with message 0x82 value 6, range 1",
         ),
