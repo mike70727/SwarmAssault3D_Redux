@@ -14,4 +14,7 @@
     tick_hz: 0.0,
     // campaign levels unlock one after another (saves/progress.ron); true makes all selectable
     unlock_all_levels: false,
+    // your copy of the original Swarm Assault (the folder holding Game\Game.DDF): its ground,
+    // interface and sounds are used when found; empty = look next to / above the game folder
+    original_game_dir: "",
 )

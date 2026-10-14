@@ -250,7 +250,8 @@ fn hotkeys(keys: Res<ButtonInput<KeyCode>>, controls: Res<Controls>, mut sim: Re
     }
 }
 
-fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderMode>, time: Res<Time>, mut gizmos: Gizmos) {
+fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderMode>, time: Res<Time>, ground: Option<Res<crate::ground::GroundHeight>>, mut gizmos: Gizmos) {
+    let gy = |p: Vec2| crate::views::ground_at(&ground, p);
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
     let team = sim.human_team();
     let color = {
@@ -261,11 +262,11 @@ fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderM
         if let Some(u) = sim.world.unit(*id) {
             let r = sim.world.unit_def(u).radius + 0.15;
             let p = u.prev_pos.lerp(u.pos, sim.alpha);
-            gizmos.circle(Isometry3d::new(Vec3::new(p.x, 0.04, p.y), flat), r, color);
+            gizmos.circle(Isometry3d::new(Vec3::new(p.x, gy(p) + 0.04, p.y), flat), r, color);
             // health arc: green->red bar above the unit
             let def = sim.world.unit_def(u);
             let frac = (u.hp / def.hp).clamp(0.0, 1.0);
-            let base = Vec3::new(p.x - r, def.altitude + 1.1, p.y);
+            let base = Vec3::new(p.x - r, gy(p) + def.altitude + 1.1, p.y);
             gizmos.line(base, base + Vec3::X * 2.0 * r, Color::srgb(0.2, 0.2, 0.2));
             gizmos.line(base, base + Vec3::X * 2.0 * r * frac, Color::srgb(1.0 - frac, frac, 0.1));
         }
@@ -274,17 +275,17 @@ fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderM
         && let Some(col) = sim.world.colonies.get(c as usize)
     {
         let half = sim.world.colony_def(col).half_extent + 0.3;
-        gizmos.rect(Isometry3d::new(Vec3::new(col.pos.x, 0.05, col.pos.y), flat), Vec2::splat(half * 2.0), color);
-        let r = Vec3::new(col.rally.x, 0.1, col.rally.y);
+        gizmos.rect(Isometry3d::new(Vec3::new(col.pos.x, gy(col.pos) + 0.05, col.pos.y), flat), Vec2::splat(half * 2.0), color);
+        let r = Vec3::new(col.rally.x, gy(col.rally) + 0.1, col.rally.y);
         gizmos.circle(Isometry3d::new(r, flat), 0.4, Color::srgb(0.9, 0.9, 0.3));
-        gizmos.line(Vec3::new(col.pos.x, 0.1, col.pos.y), r, Color::srgba(0.9, 0.9, 0.3, 0.5));
+        gizmos.line(Vec3::new(col.pos.x, gy(col.pos) + 0.1, col.pos.y), r, Color::srgba(0.9, 0.9, 0.3, 0.5));
     }
     if let Some((p, t, attack)) = mode.last_order {
         let age = time.elapsed_secs() - t;
         if age < 1.0 {
             let r = 0.3 + age * 0.8;
             let c = if attack { Color::srgba(1.0, 0.3, 0.2, 1.0 - age) } else { Color::srgba(0.4, 1.0, 0.4, 1.0 - age) };
-            gizmos.circle(Isometry3d::new(Vec3::new(p.x, 0.06, p.y), flat), r, c);
+            gizmos.circle(Isometry3d::new(Vec3::new(p.x, gy(p) + 0.06, p.y), flat), r, c);
         }
     }
     if mode.attack_move {
@@ -292,7 +293,7 @@ fn draw_selection(sim: Res<GameSim>, selection: Res<Selection>, mode: Res<OrderM
         let pulse = 0.5 + 0.5 * (time.elapsed_secs() * 8.0).sin();
         for id in &selection.units {
             if let Some(u) = sim.world.unit(*id) {
-                gizmos.circle(Isometry3d::new(Vec3::new(u.pos.x, 0.08, u.pos.y), flat), 0.6 + pulse * 0.2, Color::srgb(1.0, 0.4, 0.2));
+                gizmos.circle(Isometry3d::new(Vec3::new(u.pos.x, gy(u.pos) + 0.08, u.pos.y), flat), 0.6 + pulse * 0.2, Color::srgb(1.0, 0.4, 0.2));
             }
         }
     }

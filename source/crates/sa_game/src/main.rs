@@ -8,9 +8,11 @@ mod audio;
 mod bench;
 mod camera;
 mod controls;
+mod ground;
 mod hud;
 mod menu;
 mod console;
+mod original;
 mod progress;
 mod screenshot;
 mod selection;
@@ -199,6 +201,8 @@ fn main() {
         )
         .add_plugins(SystemInformationDiagnosticsPlugin)
         .insert_state(initial)
+        // first: the interface, ground and audio plugins look for the original game's files
+        .add_plugins((original::OriginalPlugin, ground::GroundPlugin))
         .add_plugins((
             controls::ControlsPlugin,
             assets::GameAssetsPlugin,

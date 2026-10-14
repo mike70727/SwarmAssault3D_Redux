@@ -13,6 +13,7 @@ use sa_sim::{Anim, SimEvent, UnitId, UnitState};
 
 use crate::AppState;
 use crate::assets::GameAssets;
+use crate::ground::GroundHeight;
 use crate::sim_plugin::GameSim;
 
 #[derive(Component)]
@@ -98,21 +99,26 @@ impl Plugin for ViewsPlugin {
 }
 
 /// Paralysed units get a pulsing purple ring; defeated colonies a grey ring with the bit count.
-fn draw_status_rings(sim: Res<GameSim>, time: Res<Time>, mut gizmos: Gizmos) {
+fn draw_status_rings(sim: Res<GameSim>, time: Res<Time>, ground: Option<Res<GroundHeight>>, mut gizmos: Gizmos) {
     let flat = Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2);
     let t = time.elapsed_secs();
     for u in sim.world.living_units() {
         if u.paralyzed > 0.0 {
             let r = sim.world.unit_def(u).radius + 0.25 + 0.08 * (t * 10.0).sin();
-            gizmos.circle(Isometry3d::new(Vec3::new(u.pos.x, 0.12, u.pos.y), flat), r, Color::srgb(0.7, 0.35, 1.0));
+            gizmos.circle(Isometry3d::new(Vec3::new(u.pos.x, ground_at(&ground, u.pos) + 0.12, u.pos.y), flat), r, Color::srgb(0.7, 0.35, 1.0));
         }
     }
     for c in &sim.world.colonies {
         if !c.active() {
             let half = sim.world.colony_def(c).half_extent + 0.6 + 0.2 * (t * 3.0).sin();
-            gizmos.circle(Isometry3d::new(Vec3::new(c.pos.x, 0.1, c.pos.y), flat), half, Color::srgb(0.8, 0.8, 0.8));
+            gizmos.circle(Isometry3d::new(Vec3::new(c.pos.x, ground_at(&ground, c.pos) + 0.1, c.pos.y), flat), half, Color::srgb(0.8, 0.8, 0.8));
         }
     }
+}
+
+/// Height of the 3-D ground under a simulation position (0 until the ground is built).
+pub fn ground_at(ground: &Option<Res<GroundHeight>>, p: Vec2) -> f32 {
+    ground.as_ref().map(|g| g.stand(p.x, p.y)).unwrap_or(0.0)
 }
 
 pub fn sim_to_world(p: Vec2, height: f32) -> Vec3 {
@@ -243,11 +249,11 @@ fn on_scene_ready(
     }
 }
 
-fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, sim: &GameSim, id: UnitId) -> Option<Entity> {
+fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, sim: &GameSim, id: UnitId, ground_y: f32) -> Option<Entity> {
     let u = sim.world.unit(id)?;
     let def = sim.world.unit_def(u);
     let height = def.altitude;
-    let tf = Transform::from_translation(sim_to_world(u.pos, height)).with_rotation(heading_to_quat(u.heading));
+    let tf = Transform::from_translation(sim_to_world(u.pos, height + ground_y)).with_rotation(heading_to_quat(u.heading));
     let model = assets.model(&def.model);
     let use_model = model.is_some_and(|m| m.ready && m.scene.is_some());
     let mut e = commands.spawn((UnitView { id, model: def.model.clone(), placeholder: !use_model }, DespawnOnExit(AppState::InGame), AnimState::default(), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, id.idx))));
@@ -272,13 +278,13 @@ fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, sim: &GameSim, 
     Some(e.id())
 }
 
-fn sync_units(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, mut index: ResMut<ViewIndex>, mut q: Query<(&UnitView, &mut Transform)>) {
+fn sync_units(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>, mut index: ResMut<ViewIndex>, mut q: Query<(&UnitView, &mut Transform)>) {
     // spawn views for new units, despawn removed ones
     let mut present: Vec<UnitId> = Vec::with_capacity(index.units.len());
     for u in sim.world.units_iter() {
         present.push(u.id);
         if !index.units.contains_key(&u.id)
-            && let Some(e) = spawn_unit_view(&mut commands, &assets, &sim, u.id)
+            && let Some(e) = spawn_unit_view(&mut commands, &assets, &sim, u.id, ground_at(&ground, u.pos))
         {
             index.units.insert(u.id, e);
         }
@@ -319,7 +325,7 @@ fn sync_units(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>
             }
             UnitState::Alive => {}
         }
-        tf.translation = sim_to_world(pos, height);
+        tf.translation = sim_to_world(pos, height + ground_at(&ground, pos));
         tf.rotation = rot;
     }
 }
@@ -331,6 +337,7 @@ fn sync_colonies(
     mut assets: ResMut<GameAssets>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut index: ResMut<ViewIndex>,
+    ground: Option<Res<GroundHeight>>,
     mut q: Query<(Entity, &mut ColonyView, &Children)>,
     tints: Query<Entity, With<TeamTint>>,
     mat_names: Query<(Entity, &GltfMaterialName)>,
@@ -342,7 +349,8 @@ fn sync_colonies(
             continue;
         }
         let def = sim.world.colony_def(c);
-        let tf = Transform::from_translation(sim_to_world(c.pos, 0.0));
+        // sink the base a little so it meets the ground all round
+        let tf = Transform::from_translation(sim_to_world(c.pos, ground_at(&ground, c.pos) - 0.04));
         let model = assets.model(&def.model);
         let use_model = model.is_some_and(|m| m.ready && m.scene.is_some());
         let mut e = commands.spawn((ColonyView { id: c.id, team: c.team, defeated: !c.active() }, DespawnOnExit(AppState::InGame), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, c.id))));
@@ -424,14 +432,14 @@ fn animate_turrets(sim: Res<GameSim>, time: Res<Time>, mut stats: ResMut<AnimSta
     }
 }
 
-fn sync_bits(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, mut index: ResMut<ViewIndex>, mut q: Query<(&BitView, &mut Transform)>) {
+fn sync_bits(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>, mut index: ResMut<ViewIndex>, mut q: Query<(&BitView, &mut Transform)>) {
     for b in &sim.world.bits {
         if !b.alive || index.bits.contains_key(&b.id) {
             continue;
         }
         let (p, h) = b.pos_height();
         let model = assets.model("colony_bit");
-        let mut e = commands.spawn((BitView(b.id), DespawnOnExit(AppState::InGame), Transform::from_translation(sim_to_world(p, h + 0.25)), Visibility::default(), Name::new(format!("Bit {}", b.id))));
+        let mut e = commands.spawn((BitView(b.id), DespawnOnExit(AppState::InGame), Transform::from_translation(sim_to_world(p, ground_at(&ground, p) + h + 0.25)), Visibility::default(), Name::new(format!("Bit {}", b.id))));
         if let Some(m) = model.filter(|m| m.ready && m.scene.is_some()) {
             let scene = m.scene.clone().unwrap();
             e.with_children(|c| {
@@ -456,13 +464,13 @@ fn sync_bits(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>,
         if let Some(b) = sim.world.bit(view.0) {
             let (p, h) = b.pos_height();
             let bob = if b.landed() { 0.25 + 0.08 * (t * 4.0 + view.0 as f32).sin() } else { 0.25 };
-            tf.translation = sim_to_world(p, h + bob);
+            tf.translation = sim_to_world(p, ground_at(&ground, p) + h + bob);
             tf.rotation = Quat::from_rotation_y(t * 2.0 + view.0 as f32);
         }
     }
 }
 
-fn sync_projectiles(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, mut index: ResMut<ViewIndex>, mut q: Query<(&ProjectileView, &mut Transform)>) {
+fn sync_projectiles(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>, mut index: ResMut<ViewIndex>, mut q: Query<(&ProjectileView, &mut Transform)>) {
     for p in &sim.world.projectiles {
         if !p.alive || index.projectiles.contains_key(&p.id) {
             continue;
@@ -473,7 +481,7 @@ fn sync_projectiles(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameA
             _ => Vec3::splat(1.0),
         };
         let e = commands
-            .spawn((ProjectileView(p.id), DespawnOnExit(AppState::InGame), Mesh3d(assets.projectile_mesh.clone()), MeshMaterial3d(assets.projectile_material.clone()), Transform::from_translation(sim_to_world(p.pos, p.height)).with_scale(scale), Name::new("Projectile")))
+            .spawn((ProjectileView(p.id), DespawnOnExit(AppState::InGame), Mesh3d(assets.projectile_mesh.clone()), MeshMaterial3d(assets.projectile_material.clone()), Transform::from_translation(sim_to_world(p.pos, ground_at(&ground, p.pos) + p.height)).with_scale(scale), Name::new("Projectile")))
             .id();
         index.projectiles.insert(p.id, e);
     }
@@ -486,13 +494,13 @@ fn sync_projectiles(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameA
     }
     for (view, mut tf) in q.iter_mut() {
         if let Some(p) = sim.world.projectiles.iter().find(|p| p.id == view.0) {
-            tf.translation = sim_to_world(p.pos, p.height.max(0.05));
+            tf.translation = sim_to_world(p.pos, ground_at(&ground, p.pos) + p.height.max(0.05));
             tf.rotation = heading_to_quat(p.heading);
         }
     }
 }
 
-fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<GameAssets>) {
+fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>) {
     let events = std::mem::take(&mut sim.events);
     for e in &events {
         match e {
@@ -505,16 +513,16 @@ fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<G
                     _ => (0.4, 0.25),
                 };
                 let mat = assets.impact_materials.get(effect).cloned().unwrap_or_else(|| assets.impact_materials["hit_small"].clone());
-                commands.spawn((ImpactFx { t: 0.0, life, size }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(mat), Transform::from_translation(sim_to_world(*pos, 0.3)).with_scale(Vec3::splat(0.05)), Name::new("Impact")));
+                commands.spawn((ImpactFx { t: 0.0, life, size }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(mat), Transform::from_translation(sim_to_world(*pos, ground_at(&ground, *pos) + 0.3)).with_scale(Vec3::splat(0.05)), Name::new("Impact")));
             }
             SimEvent::ColonyScattered(cid) => {
                 if let Some(c) = sim.world.colonies.get(*cid as usize) {
-                    commands.spawn((ImpactFx { t: 0.0, life: 1.0, size: 4.0 }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(assets.impact_materials["colony_explode"].clone()), Transform::from_translation(sim_to_world(c.pos, 1.0)).with_scale(Vec3::splat(0.1))));
+                    commands.spawn((ImpactFx { t: 0.0, life: 1.0, size: 4.0 }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(assets.impact_materials["colony_explode"].clone()), Transform::from_translation(sim_to_world(c.pos, ground_at(&ground, c.pos) + 1.0)).with_scale(Vec3::splat(0.1))));
                 }
             }
             SimEvent::PirateSpawn { pos, .. } => {
                 // leave an ant-hole prop where the pirates came out
-                let mut e = commands.spawn((Name::new("AntHole"), DespawnOnExit(AppState::InGame), Transform::from_translation(sim_to_world(*pos, 0.0)), Visibility::default()));
+                let mut e = commands.spawn((Name::new("AntHole"), DespawnOnExit(AppState::InGame), Transform::from_translation(sim_to_world(*pos, ground_at(&ground, *pos))), Visibility::default()));
                 if let Some(m) = assets.model("ant_hole").filter(|m| m.ready && m.scene.is_some()) {
                     let scene = m.scene.clone().unwrap();
                     e.with_children(|c| {
