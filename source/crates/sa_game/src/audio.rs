@@ -1,68 +1,225 @@
-//! Audio hooks. The simulation emits named sound ids (weapon `fire_sound`/`impact_sound`,
-//! `Sound { id }` events for colony/bit events). This plugin plays `assets/audio/<id>.ogg` (or .wav)
-//! when such a file exists and silently ignores ids without a file, so the game ships without any
-//! original audio but every hook is in place (see docs/AUDIO_HOOKS.md).
+//! Audio. The simulation emits named sound hooks (weapon `fire_sound` / `impact_sound`,
+//! `Sound { id }` events for colony and bit events); this plugin turns them into sounds.
+//!
+//! With the player's copy of the original game (see original.rs) the original sounds play: the
+//! weapons and impacts as OpenSA wired them, colony and bit events, the bugs' acknowledgements when
+//! they are selected or ordered, a looping ambience per tileset (frogs, wind, crickets, the candy
+//! dreamscape) and the menu theme. Without a copy the synthesized set in `assets/audio` plays
+//! (docs/AUDIO_HOOKS.md); hooks without a sound stay silent.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
-use bevy::audio::{AudioPlayer, AudioSource, PlaybackSettings, Volume};
+use bevy::audio::{AudioPlayer, AudioSink, AudioSinkPlayback, AudioSource, PlaybackSettings, Volume};
 use bevy::prelude::*;
-use sa_sim::{SimEvent, Target};
+use bevy::state::state_scoped::DespawnOnExit;
+use sa_sim::{SimEvent, UnitId};
 
 use crate::AppState;
 use crate::asset_root;
 use crate::camera::RtsCamera;
+use crate::original::Original;
+use crate::selection::{OrderMode, Selection};
 use crate::sim_plugin::GameSim;
+
+/// Sound hook -> original sound names (several = a random variant each time).
+const ORIGINAL_SOUNDS: &[(&str, &[&str])] = &[
+    ("ant_crunch", &["ANTCRUNCH"]),
+    ("savage_attack", &["SAVAGEATTACK"]),
+    ("rocket_launch", &["ROCKETLAUNCH"]),
+    ("minigun", &["MINIGUN"]),
+    ("shrapnel_fire", &["SHRAPNELFIRE"]),
+    ("cannon", &["CANNON"]),
+    ("sniper_fire", &["SNIPERFIRE"]),
+    ("sniper_hit", &["SNIPERHIT"]),
+    ("missile_launch", &["MISSILELAUNCH"]),
+    ("spear", &["SPEAR"]),
+    ("star_launch", &["STARLAUNCH"]),
+    ("star_hit", &["STARHIT"]),
+    ("machinegun", &["MACHINEGUN"]),
+    ("arrow", &["ARROW"]),
+    ("paralysis", &["PARALYSIS"]),
+    ("sonic", &["SONIC"]),
+    ("turret_mg", &["TURRETMACHINEGUN"]),
+    ("chaingun", &["CHAINGUN"]),
+    ("explosion1", &["EXPLOSION1"]),
+    ("explosion2", &["EXPLOSION2"]),
+    ("explosion3", &["EXPLOSION3"]),
+    ("ricochet", &["RIC1", "RIC2", "RIC3", "RIC4"]),
+    ("brakebomb_explode", &["BRAKEBOMBEXPLODE"]),
+    ("bouncebomb_explode", &["BOUNCEBOMBEXPLODE"]),
+    ("gobstopper_explode", &["GOBSTOPPEREXPLODE"]),
+    ("bounce", &["BOUNCE"]),
+    ("colony_lost", &["POWERDOWN"]),
+    ("colony_captured", &["POWERUP"]),
+    ("colony_explode", &["COLONYEXPLODE"]),
+    ("bit_pickup", &["COLONYPICKUP"]),
+    ("bit_land", &["COLONYPICKUPLAND"]),
+    ("bit_expired", &["COLONYPICKUPTIMEOUT"]),
+    ("ant_hole", &["ANTHOLEOPEN"]),
+    ("production_change", &["PRODUCTIONCHANGE"]),
+    ("production_stop", &["SELECT"]),
+    ("victory", &["GAMEOVERWOW"]),
+    ("defeat", &["GAMEOVERBOOM"]),
+    ("crash", &["CRASH"]),
+    ("ui_click", &["CLICK"]),
+    ("voice_ant", &["STANDANTA", "STANDANTB", "STANDANTC"]),
+    ("voice_beetle", &["STANDBEETLEA", "STANDBEETLEB", "STANDBEETLEC"]),
+    ("voice_spider", &["STANDSPIDERA", "STANDSPIDERB", "STANDSPIDERC"]),
+    ("voice_scorpion", &["STANDSCORPIONA", "STANDSCORPIONB", "STANDSCORPIONC"]),
+    ("voice_wasp", &["STANDWASPA", "STANDWASPB", "STANDWASPC"]),
+    ("voice_neutral", &["COMMAND"]),
+    ("ambient_normal", &["FROGS"]),
+    ("ambient_desert", &["WIND"]),
+    ("ambient_swamp", &["CRICKETS"]),
+    ("ambient_candy", &["DREAMSCAPE"]),
+    ("menu_music", &["STARTBACKGROUND"]),
+];
+
+/// Hooks of the synthesized set that the original game does not have: silent with the originals
+/// (bugs die without a scream, a new unit appears without a chime, as in the original).
+const SILENT_WITH_ORIGINAL: &[&str] = &["death_ant", "death_beetle", "death_spider", "death_scorpion", "death_wasp", "death_neutral", "unit_ready"];
 
 #[derive(Resource, Default)]
 pub struct AudioLibrary {
-    pub sounds: HashMap<String, Handle<AudioSource>>,
+    /// hook id -> sound variants
+    pub sounds: HashMap<String, Vec<Handle<AudioSource>>>,
     /// ids requested at least once (listed in the benchmark/test logs so missing files are visible)
     pub requested: HashSet<String>,
     pub enabled: bool,
     pub master_volume: f32,
+    /// the sounds come from the player's copy of the original game
+    pub original: bool,
     /// per-frame limiter so a big battle does not spawn hundreds of players
     budget: u32,
+    rng: u32,
 }
 
 impl AudioLibrary {
-    pub fn load(asset_server: &AssetServer) -> Self {
-        let dir = std::path::PathBuf::from(asset_root()).join("audio");
-        let mut sounds = HashMap::new();
-        if let Ok(rd) = std::fs::read_dir(&dir) {
-            for entry in rd.flatten() {
-                let path = entry.path();
-                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-                if ext == "ogg" || ext == "wav" {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        let rel = format!("audio/{}", path.file_name().unwrap().to_string_lossy());
-                        sounds.insert(stem.to_string(), asset_server.load::<AudioSource>(rel));
-                    }
-                }
+    /// A variant of a hook's sound (random when there are several).
+    pub fn pick(&mut self, id: &str) -> Option<Handle<AudioSource>> {
+        let v = self.sounds.get(id)?;
+        if v.is_empty() {
+            return None;
+        }
+        self.rng = self.rng.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        Some(v[(self.rng >> 16) as usize % v.len()].clone())
+    }
+
+    /// Play a hook once (interface sounds: no distance attenuation).
+    pub fn play_ui(&mut self, commands: &mut Commands, id: &str, volume: f32) {
+        self.requested.insert(id.to_string());
+        if !self.enabled {
+            return;
+        }
+        if let Some(h) = self.pick(id) {
+            commands.spawn((AudioPlayer::new(h), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(self.master_volume * volume))));
+        }
+    }
+}
+
+fn load_library(asset_server: &AssetServer, sources: &mut Assets<AudioSource>, original: &Original) -> AudioLibrary {
+    let mut sounds: HashMap<String, Vec<Handle<AudioSource>>> = HashMap::new();
+    // the game's own synthesized set
+    let dir = std::path::PathBuf::from(asset_root()).join("audio");
+    let mut own = 0;
+    if let Ok(rd) = std::fs::read_dir(&dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            if (ext == "ogg" || ext == "wav")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                let rel = format!("audio/{}", path.file_name().unwrap().to_string_lossy());
+                sounds.insert(stem.to_string(), vec![asset_server.load::<AudioSource>(rel)]);
+                own += 1;
             }
         }
-        info!("audio: {} sound files found in {}", sounds.len(), dir.display());
-        Self { sounds, requested: HashSet::new(), enabled: true, master_volume: 0.8, budget: 0 }
     }
+    // the original sounds replace them where they exist
+    let mut from_original = 0;
+    let is_original = original.get().is_some();
+    if let Some(orig) = original.get() {
+        for id in SILENT_WITH_ORIGINAL {
+            sounds.remove(*id);
+        }
+        let mut cache: HashMap<&str, Vec<Handle<AudioSource>>> = HashMap::new();
+        for (hook, names) in ORIGINAL_SOUNDS {
+            let mut variants = Vec::new();
+            for name in names.iter() {
+                let hs = cache.entry(name).or_insert_with(|| {
+                    orig.sound(name)
+                        .map(|takes| takes.iter().map(|s| sources.add(AudioSource { bytes: Arc::clone(&s.wav) })).collect())
+                        .unwrap_or_default()
+                });
+                variants.extend(hs.iter().cloned());
+            }
+            if !variants.is_empty() {
+                sounds.insert(hook.to_string(), variants);
+                from_original += 1;
+            }
+        }
+    }
+    info!("audio: {own} sound files in {}, {from_original} hooks use the original sounds", dir.display());
+    AudioLibrary { sounds, requested: HashSet::new(), enabled: true, master_volume: 0.8, original: is_original, budget: 0, rng: 12345 }
 }
 
 pub struct GameAudioPlugin;
 
 impl Plugin for GameAudioPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_audio).add_systems(Update, play_sim_sounds.run_if(in_state(AppState::InGame)));
+        app.add_systems(Startup, setup_audio)
+            .add_systems(OnEnter(AppState::Menu), start_menu_music)
+            .add_systems(OnEnter(AppState::InGame), start_ambience)
+            .add_systems(Update, (play_sim_sounds, play_voices).run_if(in_state(AppState::InGame)))
+            .add_systems(Update, update_loop_volume);
     }
 }
 
-fn setup_audio(mut commands: Commands, asset_server: Res<AssetServer>, settings: Res<crate::settings::Settings>) {
-    let mut lib = AudioLibrary::load(&asset_server);
+fn setup_audio(mut commands: Commands, asset_server: Res<AssetServer>, mut sources: ResMut<Assets<AudioSource>>, original: Res<Original>, settings: Res<crate::settings::Settings>) {
+    let mut lib = load_library(&asset_server, &mut sources, &original);
     lib.master_volume = settings.master_volume.clamp(0.0, 1.0);
     lib.enabled = settings.sound_enabled;
     commands.insert_resource(lib);
 }
 
-/// Translate simulation events into sound ids and play the ones that have files.
-fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<AudioLibrary>, cam: Option<Res<RtsCamera>>) {
+/// A looping sound (menu theme, ambience): its volume follows the settings.
+#[derive(Component)]
+struct LoopSound {
+    volume: f32,
+}
+
+fn spawn_loop(commands: &mut Commands, lib: &mut AudioLibrary, id: &str, volume: f32, state: AppState) {
+    lib.requested.insert(id.to_string());
+    let Some(h) = lib.pick(id) else { return };
+    let v = if lib.enabled { lib.master_volume * volume } else { 0.0 };
+    commands.spawn((LoopSound { volume }, DespawnOnExit(state), AudioPlayer::new(h), PlaybackSettings::LOOP.with_volume(Volume::Linear(v))));
+}
+
+fn start_menu_music(mut commands: Commands, lib: Option<ResMut<AudioLibrary>>) {
+    if let Some(mut lib) = lib {
+        spawn_loop(&mut commands, &mut lib, "menu_music", 0.55, AppState::Menu);
+    }
+}
+
+fn start_ambience(mut commands: Commands, lib: Option<ResMut<AudioLibrary>>, sim: Res<GameSim>) {
+    let Some(mut lib) = lib else { return };
+    let id = format!("ambient_{}", sim.world.map.tileset);
+    spawn_loop(&mut commands, &mut lib, &id, 0.3, AppState::InGame);
+}
+
+fn update_loop_volume(lib: Option<Res<AudioLibrary>>, mut sinks: Query<(&LoopSound, &mut AudioSink)>) {
+    let Some(lib) = lib else { return };
+    if !lib.is_changed() {
+        return;
+    }
+    for (l, mut sink) in &mut sinks {
+        sink.set_volume(Volume::Linear(if lib.enabled { lib.master_volume * l.volume } else { 0.0 }));
+    }
+}
+
+/// Translate simulation events into sound hooks and play the ones that have sounds.
+fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<AudioLibrary>, cam: Option<Res<RtsCamera>>, mut landed: Local<HashSet<u32>>) {
     lib.budget = 12;
     let focus = cam.as_ref().map(|c| Vec2::new(c.focus.x, c.focus.z)).unwrap_or(Vec2::ZERO);
     let zoom = cam.as_ref().map(|c| c.distance).unwrap_or(26.0);
@@ -95,7 +252,12 @@ fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<Au
             }
             SimEvent::UnitDied(id) => {
                 if let Some(u) = sim.world.unit(*id) {
-                    requests.push((format!("death_{:?}", sim.world.unit_def(u).family).to_ascii_lowercase(), u.pos));
+                    let def = sim.world.unit_def(u);
+                    if def.model == "neutral_flying_machine" {
+                        requests.push(("crash".into(), u.pos));
+                    } else {
+                        requests.push((format!("death_{:?}", def.family).to_ascii_lowercase(), u.pos));
+                    }
                 }
             }
             SimEvent::UnitSpawned(id) => {
@@ -117,28 +279,66 @@ fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<Au
                     requests.push(("bit_pickup".into(), u.pos));
                 }
             }
+            SimEvent::BitExpired(id) => {
+                if let Some(b) = sim.world.bit(*id) {
+                    requests.push(("bit_expired".into(), b.end));
+                }
+            }
             _ => {}
         }
     }
+    // colony bits thud when they land
+    for b in &sim.world.bits {
+        if b.alive && b.landed() && landed.insert(b.id) {
+            requests.push(("bit_land".into(), b.end));
+        }
+    }
+    landed.retain(|id| sim.world.bit(*id).is_some_and(|b| b.alive));
     for (id, pos) in requests {
         lib.requested.insert(id.clone());
         if !lib.enabled || lib.budget == 0 {
             continue;
         }
-        let Some(handle) = lib.sounds.get(&id).cloned() else { continue };
         // simple distance attenuation relative to the camera focus
         let d = pos.distance(focus);
         let vol = (1.0 - (d / (zoom * 1.6)).clamp(0.0, 0.9)) * lib.master_volume;
         if vol <= 0.05 {
             continue;
         }
+        let Some(handle) = lib.pick(&id) else { continue };
         lib.budget -= 1;
         commands.spawn((AudioPlayer::new(handle), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol))));
     }
 }
 
-/// Target helper kept for future per-target hit sounds.
-#[allow(dead_code)]
-fn target_pos(sim: &GameSim, t: Target) -> Option<Vec2> {
-    sim.world.target_pos(t)
+/// The bugs answer when the player selects them or gives them an order (the original's
+/// STAND<family><A/B/C> acknowledgements), at most a few times a second.
+fn play_voices(
+    mut commands: Commands,
+    sim: Res<GameSim>,
+    selection: Res<Selection>,
+    mode: Res<OrderMode>,
+    time: Res<Time>,
+    mut lib: ResMut<AudioLibrary>,
+    mut last_sel: Local<Vec<UnitId>>,
+    mut last_order: Local<f32>,
+    mut last_voice: Local<f32>,
+) {
+    let now = time.elapsed_secs();
+    let added = selection.units.iter().any(|id| !last_sel.contains(id));
+    let ordered = mode.last_order.is_some_and(|(_, t, _)| t > *last_order);
+    if let Some((_, t, _)) = mode.last_order {
+        *last_order = last_order.max(t);
+    }
+    last_sel.clone_from(&selection.units);
+    if !(added || ordered) || now - *last_voice < 0.3 {
+        return;
+    }
+    let Some(u) = selection.units.iter().find_map(|id| sim.world.unit(*id)) else { return };
+    if u.team != sim.human_team() {
+        return;
+    }
+    let id = format!("voice_{:?}", sim.world.unit_def(u).family).to_ascii_lowercase();
+    *last_voice = now;
+    lib.play_ui(&mut commands, &id, 0.8);
 }

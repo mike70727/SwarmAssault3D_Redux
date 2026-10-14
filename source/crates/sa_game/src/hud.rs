@@ -52,7 +52,7 @@ struct HpBar;
 #[derive(Component)]
 struct HpFill;
 #[derive(Component)]
-struct BreedButton(usize);
+pub struct BreedButton(pub usize);
 #[derive(Component)]
 struct BreedIcon(usize);
 #[derive(Component)]
@@ -156,7 +156,15 @@ fn human_family(sim: &GameSim) -> String {
     format!("{fam:?}").to_ascii_lowercase()
 }
 
-fn setup_hud(mut commands: Commands, sim: Res<GameSim>, mut images: ResMut<Assets<Image>>, ui: Res<UiAssets>) {
+fn setup_hud(mut commands: Commands, sim: Res<GameSim>, mut images: ResMut<Assets<Image>>, ui: Res<UiAssets>, orig: Option<Res<crate::orig_ui::OrigUi>>) {
+    // with the original game's interface its own sidebar replaces this one (orig_ui.rs)
+    if orig.is_none() {
+        spawn_sidebar(&mut commands, &sim, &mut images, &ui);
+    }
+    spawn_overlays(&mut commands, &ui);
+}
+
+fn spawn_sidebar(commands: &mut Commands, sim: &GameSim, images: &mut Assets<Image>, ui: &UiAssets) {
     let grid = &sim.world.grid;
     let (w, h) = (grid.w as u32, grid.h as u32);
     let mut base = Vec::with_capacity((w * h * 4) as usize);
@@ -169,7 +177,7 @@ fn setup_hud(mut commands: Commands, sim: Res<GameSim>, mut images: ResMut<Asset
     image.sampler = ImageSampler::nearest();
     let handle = images.add(image);
     commands.insert_resource(Minimap { handle: handle.clone(), w, h, timer: 0.0, base });
-    let family = human_family(&sim);
+    let family = human_family(sim);
 
     commands
         .spawn((
@@ -257,11 +265,15 @@ fn setup_hud(mut commands: Commands, sim: Res<GameSim>, mut images: ResMut<Asset
                 });
             });
         });
+}
+
+/// The black message bar, the F3 statistics and the F1 help (with either sidebar).
+fn spawn_overlays(commands: &mut Commands, ui: &UiAssets) {
     // black message bar at the bottom-left, like the original's command bar
     commands
         .spawn((
             DespawnOnExit(AppState::InGame),
-            black_bar(&ui),
+            black_bar(ui),
             Node { position_type: PositionType::Absolute, left: px(0), bottom: px(0), width: px(MESSAGE_BAR.0), height: px(MESSAGE_BAR.1), padding: UiRect::axes(px(16), px(4)), align_items: AlignItems::Center, overflow: Overflow::clip(), ..default() },
             GlobalZIndex(5),
         ))
@@ -518,7 +530,15 @@ fn update_breed_panel(
 
 /// Observers of `Activate` run for every button, including the main menu's, where no game is
 /// loaded: the simulation must stay optional here.
-fn on_breed(ev: On<Activate>, buttons: Query<&BreedButton>, sim: Option<ResMut<GameSim>>, selection: Res<Selection>, mut messages: ResMut<Messages>) {
+fn on_breed(
+    ev: On<Activate>,
+    buttons: Query<&BreedButton>,
+    sim: Option<ResMut<GameSim>>,
+    selection: Res<Selection>,
+    mut messages: ResMut<Messages>,
+    lib: Option<ResMut<crate::audio::AudioLibrary>>,
+    mut commands: Commands,
+) {
     let Ok(b) = buttons.get(ev.entity) else { return };
     let Some(mut sim) = sim else { return };
     let Some(c) = selection.colony else { return };
@@ -530,16 +550,21 @@ fn on_breed(ev: On<Activate>, buttons: Query<&BreedButton>, sim: Option<ResMut<G
     let def = sim.world.colony_def(col).clone();
     let Some(unit) = def.produces.get(b.0).and_then(|p| sim.world.defs.unit(p)) else { return };
     let name = sim.world.defs.units[unit as usize].name.clone();
-    if col.production.kind == Some(unit) {
+    let stopping = col.production.kind == Some(unit);
+    if stopping {
         sim.world.set_production(c, None);
         messages.push("Breeding stopped");
     } else {
         sim.world.set_production(c, Some(unit));
         messages.push(format!("Breeding {name}"));
     }
+    if let Some(mut lib) = lib {
+        lib.play_ui(&mut commands, if stopping { "production_stop" } else { "production_change" }, 0.8);
+    }
 }
 
-fn update_minimap(sim: Res<GameSim>, cam: Option<Res<RtsCamera>>, time: Res<Time>, mut minimap: ResMut<Minimap>, mut images: ResMut<Assets<Image>>) {
+fn update_minimap(sim: Res<GameSim>, cam: Option<Res<RtsCamera>>, time: Res<Time>, minimap: Option<ResMut<Minimap>>, mut images: ResMut<Assets<Image>>) {
+    let Some(mut minimap) = minimap else { return };
     minimap.timer -= time.delta_secs();
     if minimap.timer > 0.0 {
         return;

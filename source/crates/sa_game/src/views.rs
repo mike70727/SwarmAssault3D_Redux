@@ -500,11 +500,13 @@ fn sync_projectiles(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameA
     }
 }
 
-fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>) {
+fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>, orig_fx: Option<Res<crate::orig_fx::OrigFx>>) {
     let events = std::mem::take(&mut sim.events);
+    // with the original game the explosions are its own animations (orig_fx.rs)
+    let spheres = orig_fx.is_none();
     for e in &events {
         match e {
-            SimEvent::Impact { pos, effect, .. } => {
+            SimEvent::Impact { pos, effect, .. } if spheres => {
                 let (size, life) = match effect.as_str() {
                     "explosion_big" | "colony_explode" => (1.6, 0.5),
                     "explosion_medium" | "explosion_shrapnel" => (1.0, 0.4),
@@ -515,7 +517,7 @@ fn spawn_impacts(mut commands: Commands, mut sim: ResMut<GameSim>, assets: Res<G
                 let mat = assets.impact_materials.get(effect).cloned().unwrap_or_else(|| assets.impact_materials["hit_small"].clone());
                 commands.spawn((ImpactFx { t: 0.0, life, size }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(mat), Transform::from_translation(sim_to_world(*pos, ground_at(&ground, *pos) + 0.3)).with_scale(Vec3::splat(0.05)), Name::new("Impact")));
             }
-            SimEvent::ColonyScattered(cid) => {
+            SimEvent::ColonyScattered(cid) if spheres => {
                 if let Some(c) = sim.world.colonies.get(*cid as usize) {
                     commands.spawn((ImpactFx { t: 0.0, life: 1.0, size: 4.0 }, DespawnOnExit(AppState::InGame), Mesh3d(assets.impact_mesh.clone()), MeshMaterial3d(assets.impact_materials["colony_explode"].clone()), Transform::from_translation(sim_to_world(c.pos, ground_at(&ground, c.pos) + 1.0)).with_scale(Vec3::splat(0.1))));
                 }

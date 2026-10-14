@@ -85,6 +85,42 @@ impl MaterialExtension for TerrainExt {
     }
 }
 
+/// Radar colours of the level, one RGBA pixel per cell (the layers in the tileset's colours).
+#[derive(Resource, Clone)]
+pub struct RadarBase {
+    pub rgba: Vec<u8>,
+}
+
+/// Radar colours of the four layers per tileset (ground, water, rock, vegetation), after the
+/// colours of the original tiles.
+fn radar_palette(tileset: &str) -> [[f32; 3]; 4] {
+    let c = |h: u32| [((h >> 16) & 255) as f32, ((h >> 8) & 255) as f32, (h & 255) as f32];
+    match tileset {
+        "desert" => [c(0xb77c48), c(0x4a3a30), c(0x847d76), c(0x5a4a40)],
+        "swamp" => [c(0x6d6b52), c(0x2f4a36), c(0x3a4a26), c(0x3c5468)],
+        "candy" => [c(0xb4a392), c(0x816c7d), c(0x7e6457), c(0x8a2a24)],
+        _ => [c(0xa48669), c(0x4a5a7a), c(0x7c7464), c(0x36512d)],
+    }
+}
+
+fn radar_base(layers: &LayerMap, w: i32, h: i32, tileset: &str) -> RadarBase {
+    let pal = radar_palette(tileset);
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        for x in 0..w {
+            let wt = layers.sample(x as f32 + 0.5, y as f32 + 0.5);
+            let mut col = [0.0f32; 3];
+            for (l, p) in pal.iter().enumerate() {
+                for c in 0..3 {
+                    col[c] += p[c] * wt[l];
+                }
+            }
+            rgba.extend_from_slice(&[col[0] as u8, col[1] as u8, col[2] as u8, 255]);
+        }
+    }
+    RadarBase { rgba }
+}
+
 /// Ground height for placing units, colonies and props (bilinear over the height grid).
 #[derive(Resource, Clone)]
 pub struct GroundHeight {
@@ -259,14 +295,12 @@ impl LayerMap {
         for y in 0..h {
             for x in 0..w {
                 let mut acc = [0.0f32; 4];
-                let mut n = 0.0;
                 for dy in -(radius as i32)..=radius as i32 {
                     let sy = (y as i32 + dy).clamp(0, h as i32 - 1) as usize;
                     let v = tmp[sy * w + x];
                     for c in 0..4 {
                         acc[c] += v[c];
                     }
-                    n += 1.0;
                 }
                 let s: f32 = acc.iter().sum::<f32>().max(1e-6);
                 self.wts[y * w + x] = acc.map(|a| a / s);
@@ -816,6 +850,9 @@ pub fn spawn_ground(
     let from_original = original.get().and_then(|o| layers_from_original(&sim, o));
     let source = if from_original.is_some() { "original level art" } else { "level terrain cells" };
     let layers = from_original.unwrap_or_else(|| layers_from_cells(&sim));
+
+    // radar colours (the original interface's radar uses them)
+    commands.insert_resource(radar_base(&layers, w, h, &tileset));
 
     // height field + mesh
     let heights = build_heights(&layers, w, h, seed);

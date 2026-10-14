@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use bevy::audio::{AudioPlayer, PlaybackSettings, Volume};
 use bevy::picking::hover::Hovered;
 use bevy::prelude::*;
 use bevy::text::{FontSize, FontSource};
@@ -160,7 +159,12 @@ pub enum CursorKind {
     #[default]
     Arrow,
     Attack,
+    /// dragging a selection box
     Select,
+    /// over one of the player's own units or colonies
+    Own,
+    /// units selected, over open ground: a click sends them there
+    Move,
 }
 
 pub struct UiPlugin;
@@ -169,7 +173,10 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         // loaded while the app is built: the first state transition (menu or level) needs it
         let server = app.world().resource::<AssetServer>().clone();
-        app.insert_resource(UiAssets::load(&server)).add_systems(Update, (dialog_button_style, update_cursor)).add_observer(click_sound);
+        app.insert_resource(UiAssets::load(&server))
+            .init_resource::<crate::orig_ui::SidebarWidth>()
+            .add_systems(Update, (dialog_button_style, update_cursor))
+            .add_observer(click_sound);
     }
 }
 
@@ -205,7 +212,10 @@ fn update_cursor(
     console: Option<Res<crate::console::ConsoleState>>,
     windows: Query<(Entity, &Window), With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
-    mut last: Local<Option<CursorKind>>,
+    sidebar: Res<crate::orig_ui::SidebarWidth>,
+    orig: Option<Res<crate::orig_ui::OrigUi>>,
+    time: Res<Time>,
+    mut last: Local<Option<(CursorKind, usize)>>,
 ) {
     let Ok((entity, window)) = windows.single() else { return };
     let mut kind = CursorKind::Arrow;
@@ -217,45 +227,62 @@ fn update_cursor(
         if drag.as_ref().is_some_and(|d| d.dragging) {
             kind = CursorKind::Select;
         } else if let Some(cursor) = window.cursor_position()
-            && cursor.x < window.width() - SIDEBAR_WIDTH
-            && !selection.units.is_empty()
+            && cursor.x < window.width() - sidebar.0
         {
-            if mode.as_ref().is_some_and(|m| m.attack_move) {
-                kind = CursorKind::Attack;
-            } else if let Ok((camera, tf)) = cameras.single()
-                && let Some(p) = cursor_ground_point(camera, tf, cursor)
-            {
-                let team = sim.human_team();
-                let w = &sim.world;
-                let enemy_unit = w.pick_unit(p, 0.5).and_then(|id| w.unit(id)).is_some_and(|u| w.is_enemy(team, u.team));
-                let enemy_colony = w.pick_colony(p).is_some_and(|c| {
-                    let col = &w.colonies[c as usize];
-                    col.active() && w.is_enemy(team, col.team)
-                });
-                if enemy_unit || enemy_colony {
-                    kind = CursorKind::Attack;
-                }
+            let team = sim.human_team();
+            let w = &sim.world;
+            let ground = cameras.single().ok().and_then(|(camera, tf)| cursor_ground_point(camera, tf, cursor));
+            let enemy_here = ground.is_some_and(|p| {
+                w.pick_unit(p, 0.5).and_then(|id| w.unit(id)).is_some_and(|u| w.is_enemy(team, u.team))
+                    || w.pick_colony(p).is_some_and(|c| {
+                        let col = &w.colonies[c as usize];
+                        col.active() && w.is_enemy(team, col.team)
+                    })
+            });
+            let own_here = ground.is_some_and(|p| {
+                w.pick_unit(p, 0.5).and_then(|id| w.unit(id)).is_some_and(|u| u.team == team) || w.pick_colony(p).is_some_and(|c| w.colonies[c as usize].team == team)
+            });
+            if !selection.units.is_empty() {
+                kind = if mode.as_ref().is_some_and(|m| m.attack_move) || enemy_here {
+                    CursorKind::Attack
+                } else if own_here {
+                    CursorKind::Own
+                } else {
+                    CursorKind::Move
+                };
+            } else if own_here {
+                kind = CursorKind::Own;
             }
         }
     }
-    if *last != Some(kind) {
-        *last = Some(kind);
-        let (handle, hotspot) = match kind {
-            CursorKind::Arrow => (ui.cursors[0].clone(), (2, 2)),
-            CursorKind::Attack => (ui.cursors[1].clone(), (15, 15)),
-            CursorKind::Select => (ui.cursors[2].clone(), (15, 15)),
-        };
-        commands.entity(entity).insert(CursorIcon::Custom(CustomCursor::Image(CustomCursorImage { handle, texture_atlas: None, flip_x: false, flip_y: false, rect: None, hotspot })));
+    // the original's cursors are three-frame animations
+    let frame = orig.as_ref().map(|_| (time.elapsed_secs() * 8.0) as usize % 3).unwrap_or(0);
+    if *last == Some((kind, frame)) {
+        return;
     }
+    *last = Some((kind, frame));
+    let original = orig.as_ref().and_then(|o| {
+        let key = match kind {
+            CursorKind::Arrow => "normal",
+            CursorKind::Own => "select",
+            CursorKind::Move => "move",
+            CursorKind::Attack => "attack",
+            CursorKind::Select => "selecttemp",
+        };
+        o.cursors.get(key).and_then(|f| f.get(frame % f.len()).cloned())
+    });
+    let (handle, hotspot) = match (original, kind) {
+        (Some(h), _) => (h, (16, 16)),
+        (None, CursorKind::Arrow | CursorKind::Own | CursorKind::Move) => (ui.cursors[0].clone(), (2, 2)),
+        (None, CursorKind::Attack) => (ui.cursors[1].clone(), (15, 15)),
+        (None, CursorKind::Select) => (ui.cursors[2].clone(), (15, 15)),
+    };
+    commands.entity(entity).insert(CursorIcon::Custom(CustomCursor::Image(CustomCursorImage { handle, texture_atlas: None, flip_x: false, flip_y: false, rect: None, hotspot })));
 }
 
 /// Every button press plays the interface click when the sound file exists.
-fn click_sound(_ev: On<Activate>, lib: Option<Res<AudioLibrary>>, mut commands: Commands) {
-    let Some(lib) = lib else { return };
-    if !lib.enabled {
-        return;
-    }
-    if let Some(h) = lib.sounds.get("ui_click") {
-        commands.spawn((AudioPlayer::new(h.clone()), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(lib.master_volume * 0.7))));
+fn click_sound(_ev: On<Activate>, lib: Option<ResMut<AudioLibrary>>, mut commands: Commands) {
+    if let Some(mut lib) = lib {
+        lib.play_ui(&mut commands, "ui_click", 0.7);
     }
 }

@@ -95,6 +95,7 @@ fn camera_input(
     controls: Res<Controls>,
     time: Res<Time>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    sidebar: Res<crate::orig_ui::SidebarWidth>,
 ) {
     let dt = time.delta_secs();
     let mut pan = Vec2::ZERO; // x = right, y = forward (screen up)
@@ -110,8 +111,11 @@ fn camera_input(
     if controls.pressed(&keys, "pan_right") {
         pan.x += 1.0;
     }
+    // edge panning only while the game has the focus (a cursor crossing the window on its way to
+    // another monitor or program must not scroll the map)
     if controls.edge_pan
         && let Ok(window) = windows.single()
+        && window.focused
         && let Some(c) = window.cursor_position()
     {
         let s = window.size();
@@ -120,7 +124,7 @@ fn camera_input(
             pan.x -= 1.0;
         }
         // the map view ends where the sidebar starts
-        let right_edge = s.x - crate::hud::SIDEBAR_WIDTH;
+        let right_edge = s.x - sidebar.0;
         if c.x >= right_edge - m && c.x < right_edge + m {
             pan.x += 1.0;
         }

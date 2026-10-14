@@ -72,6 +72,7 @@ fn selection_input(
     mut mode: ResMut<OrderMode>,
     mut pending: ResMut<PendingOrders>,
     time: Res<Time>,
+    sidebar: Res<crate::orig_ui::SidebarWidth>,
 ) {
     let Ok(window) = windows.single() else { return };
     let Ok((camera, cam_tf)) = cameras.single() else { return };
@@ -79,7 +80,7 @@ fn selection_input(
     let team = sim.human_team();
     let add = controls.pressed(&keys, "add_to_selection");
     // the sidebar covers the right edge: clicks there are interface clicks, never map orders
-    let over_sidebar = cursor.x >= window.width() - crate::hud::SIDEBAR_WIDTH;
+    let over_sidebar = cursor.x >= window.width() - sidebar.0;
     if over_sidebar && drag.start.is_none() {
         return;
     }
@@ -218,7 +219,17 @@ fn selection_input(
     selection.units.retain(|id| world.unit(*id).is_some_and(|u| u.alive()));
 }
 
-fn hotkeys(keys: Res<ButtonInput<KeyCode>>, controls: Res<Controls>, mut sim: ResMut<GameSim>, mut selection: ResMut<Selection>, mut mode: ResMut<OrderMode>, mut pending: ResMut<PendingOrders>) {
+#[allow(clippy::too_many_arguments)]
+fn hotkeys(
+    keys: Res<ButtonInput<KeyCode>>,
+    controls: Res<Controls>,
+    mut sim: ResMut<GameSim>,
+    mut selection: ResMut<Selection>,
+    mut mode: ResMut<OrderMode>,
+    mut pending: ResMut<PendingOrders>,
+    mut lib: Option<ResMut<crate::audio::AudioLibrary>>,
+    mut commands: Commands,
+) {
     let team = sim.human_team();
     if controls.just_pressed(&keys, "select_all") {
         selection.units = sim.world.living_units().filter(|u| u.team == team && sim.world.unit_def(u).controllable).map(|u| u.id).collect();
@@ -239,10 +250,16 @@ fn hotkeys(keys: Res<ButtonInput<KeyCode>>, controls: Res<Controls>, mut sim: Re
                 && let Some(kind) = roster.get(i)
             {
                 sim.world.set_production(c, Some(*kind));
+                if let Some(lib) = lib.as_mut() {
+                    lib.play_ui(&mut commands, "production_change", 0.8);
+                }
             }
         }
         if controls.just_pressed(&keys, "breed_stop") {
             sim.world.set_production(c, None);
+            if let Some(lib) = lib.as_mut() {
+                lib.play_ui(&mut commands, "production_stop", 0.8);
+            }
         }
         if controls.just_pressed(&keys, "set_rally") {
             mode.set_rally = true;
