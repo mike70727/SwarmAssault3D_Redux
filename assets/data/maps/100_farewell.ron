@@ -289,7 +289,13 @@
     rules: (
         melee_can_damage_colonies: false,
         unit_cap: Some(150),
-        flyers: true,
+        // neutral creeps (original level's Misc actors): up to `count` at once, one more every `interval` seconds
+        creeps: [
+            (units: ["plant_freckle"], count: 20, interval: (0.6, 3.0), first: (0.6, 3.0)),
+            (units: ["plant_lolly_blue", "plant_lolly_orange", "plant_lolly_white", "plant_lolly_red"], count: 35, interval: (0.6, 3.0), first: (0.6, 3.0)),
+            (units: ["neutral_flying_machine"], count: 4, interval: (19.0, 27.0), first: (19.0, 27.0)),
+        ],
+        flyers: false,
         flyer_kinds: ["neutral_flying_machine"],
         flyer_interval: 45.0,
         pirates: true,

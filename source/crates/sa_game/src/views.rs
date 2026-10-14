@@ -249,13 +249,24 @@ fn on_scene_ready(
     }
 }
 
-fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, sim: &GameSim, id: UnitId, ground_y: f32) -> Option<Entity> {
+fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, plants: Option<&crate::plants::PlantAssets>, sim: &GameSim, id: UnitId, ground_y: f32) -> Option<Entity> {
     let u = sim.world.unit(id)?;
     let def = sim.world.unit_def(u);
     let height = def.altitude;
     let tf = Transform::from_translation(sim_to_world(u.pos, height + ground_y)).with_rotation(heading_to_quat(u.heading));
     let model = assets.model(&def.model);
     let use_model = model.is_some_and(|m| m.ready && m.scene.is_some());
+    // creep plants without a model file are built in code, with moving parts (plants.rs)
+    if def.plant.is_some()
+        && !use_model
+        && let Some(plants) = plants
+    {
+        let e = commands.spawn((UnitView { id, model: def.model.clone(), placeholder: false }, DespawnOnExit(AppState::InGame), AnimState::default(), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, id.idx)))).id();
+        if crate::plants::spawn_plant_parts(commands, e, plants, &def.model, id) {
+            return Some(e);
+        }
+        commands.entity(e).despawn();
+    }
     let mut e = commands.spawn((UnitView { id, model: def.model.clone(), placeholder: !use_model }, DespawnOnExit(AppState::InGame), AnimState::default(), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, id.idx))));
     if use_model {
         let m = model.unwrap();
@@ -278,13 +289,13 @@ fn spawn_unit_view(commands: &mut Commands, assets: &GameAssets, sim: &GameSim, 
     Some(e.id())
 }
 
-fn sync_units(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, ground: Option<Res<GroundHeight>>, mut index: ResMut<ViewIndex>, mut q: Query<(&UnitView, &mut Transform)>) {
+fn sync_units(mut commands: Commands, sim: Res<GameSim>, assets: Res<GameAssets>, plants: Option<Res<crate::plants::PlantAssets>>, ground: Option<Res<GroundHeight>>, mut index: ResMut<ViewIndex>, mut q: Query<(&UnitView, &mut Transform)>) {
     // spawn views for new units, despawn removed ones
     let mut present: Vec<UnitId> = Vec::with_capacity(index.units.len());
     for u in sim.world.units_iter() {
         present.push(u.id);
         if !index.units.contains_key(&u.id)
-            && let Some(e) = spawn_unit_view(&mut commands, &assets, &sim, u.id, ground_at(&ground, u.pos))
+            && let Some(e) = spawn_unit_view(&mut commands, &assets, plants.as_deref(), &sim, u.id, ground_at(&ground, u.pos))
         {
             index.units.insert(u.id, e);
         }

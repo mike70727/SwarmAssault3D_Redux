@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use sa_sim::*;
 
 fn assets() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    // the packaged game keeps `assets` beside `source`; a plain checkout has it inside
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    ["../../assets", "../../../assets"].iter().map(|r| crate_dir.join(r)).find(|p| p.join("data").is_dir()).unwrap_or_else(|| crate_dir.join("../../assets"))
 }
 
 fn world() -> World {
@@ -16,11 +18,13 @@ fn world() -> World {
 #[test]
 fn data_files_load_and_every_model_is_named() {
     let w = world();
-    assert_eq!(w.defs.units.len(), 21, "21 roster entries expected");
+    assert_eq!(w.defs.units.iter().filter(|u| u.plant.is_none()).count(), 21, "21 roster entries expected");
+    assert_eq!(w.defs.units.iter().filter(|u| u.plant.is_some()).count(), 9, "creep plants: popcorn, thorn, seed ball, seed, freckle, four lollies");
     assert!(w.defs.colonies.len() >= 5, "5 colony families (+ level structures) expected");
     for u in &w.defs.units {
         assert!(!u.model.is_empty(), "unit {} has no model", u.name);
-        assert!(u.weapon.is_some(), "unit {} has no weapon", u.name);
+        // seeds and Death Lollies have no gun: a lolly's weapon is its blast when it dies
+        assert!(u.weapon.is_some() || u.plant.is_some(), "unit {} has no weapon", u.name);
     }
     assert_eq!(w.colonies.len(), 2);
     assert_eq!(w.living_units().count(), 16);

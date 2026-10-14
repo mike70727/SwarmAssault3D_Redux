@@ -38,7 +38,7 @@ impl Default for Settings {
             shadows: true,
             shadow_cascades: 3,
             shadow_distance: 120.0,
-            master_volume: 0.8,
+            master_volume: 0.0,
             sound_enabled: true,
             tick_hz: 0.0,
             unlock_all_levels: false,

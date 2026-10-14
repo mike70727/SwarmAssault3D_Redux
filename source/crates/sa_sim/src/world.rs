@@ -147,6 +147,21 @@ pub struct Unit {
     pub leash: Vec2,
     /// Seconds the current auto target has been out of range / unreachable.
     pub chase_timer: f32,
+    /// Plants: seconds since the plant sprouted (it can attack once this reaches its grow time).
+    #[serde(default)]
+    pub age: f32,
+    /// Flyers: seconds into the drop/rest rhythm.
+    #[serde(default)]
+    pub phase: f32,
+    /// Choc Freckle: angle (radians) of its spinning spray.
+    #[serde(default)]
+    pub spin: f32,
+    /// Flyers: drops made so far (picks the next aim point).
+    #[serde(default)]
+    pub drops: u32,
+    /// Flyers: drops left in the current burst.
+    #[serde(default)]
+    pub burst_left: u32,
 }
 
 impl Unit {
@@ -255,6 +270,9 @@ pub struct TeamState {
     pub colonies: u32,
     pub kills: u32,
     pub losses: u32,
+    /// Colonies this team has taken over (the original game menu's "Colony Takeovers").
+    #[serde(default)]
+    pub takeovers: u32,
 }
 
 /// Snapshot of what one team can see (everything; no fog of war in this recreation).
@@ -292,6 +310,12 @@ pub struct World {
     victory_timer: f32,
     flyer_timer: f32,
     pirate_timer: f32,
+    /// Countdown per `map.rules.creeps` pool (empty until the first tick).
+    #[serde(default)]
+    creep_timers: Vec<f32>,
+    /// Units that died this tick (death weapons and death spawns still to run).
+    #[serde(skip)]
+    died: Vec<UnitId>,
     #[serde(skip)]
     spatial: SpatialHash,
     #[serde(skip)]
@@ -351,6 +375,7 @@ impl World {
             colonies: 0,
             kills: 0,
             losses: 0,
+            takeovers: 0,
         });
         let mut team_defs = map.teams.clone();
         team_defs.sort_by_key(|t| t.id);
@@ -367,10 +392,11 @@ impl World {
                     colonies: 0,
                     kills: 0,
                     losses: 0,
+                    takeovers: 0,
                 });
             }
             let bot = if td.controller == Controller::Bot { Some(BotState::new(&td.bot_profile)) } else { None };
-            teams.push(TeamState { def: td, defeated: false, bot, units_alive: 0, colonies: 0, kills: 0, losses: 0 });
+            teams.push(TeamState { def: td, defeated: false, bot, units_alive: 0, colonies: 0, kills: 0, losses: 0, takeovers: 0 });
         }
         let mut w = World {
             grid,
@@ -394,6 +420,8 @@ impl World {
             victory_timer: 0.0,
             flyer_timer: 0.0,
             pirate_timer: 0.0,
+            creep_timers: Vec::new(),
+            died: Vec::new(),
             spatial: SpatialHash::new(2.0),
             scratch: Vec::new(),
             defs,
@@ -478,7 +506,16 @@ impl World {
     // -----------------------------------------------------------------------------------------
     pub fn spawn_unit(&mut self, kind: u16, team: u8, pos: Vec2, heading: f32) -> UnitId {
         let def = &self.defs.units[kind as usize];
-        let pos = if def.flying { self.grid.clamp(pos) } else { self.grid.nearest_free(pos) };
+        let mut pos = if def.flying { self.grid.clamp(pos) } else { self.grid.nearest_free(pos) };
+        let burst = def.flyer.as_ref().map_or(1, |f| f.burst.max(1));
+        if let Some(plant) = &def.plant {
+            // a plant sits in the middle of its cell and, like the original's, takes the cell up
+            let cell = self.grid.cell_of(pos);
+            pos = self.grid.center(cell);
+            if plant.blocks {
+                self.grid.set_blocked(cell, true);
+            }
+        }
         let (idx, generation) = match self.free_units.pop() {
             Some(i) => {
                 self.generations[i as usize] += 1;
@@ -526,6 +563,11 @@ impl World {
             auto_target: false,
             leash: pos,
             chase_timer: 0.0,
+            age: 0.0,
+            phase: 0.0,
+            spin: 0.0,
+            drops: 0,
+            burst_left: burst,
         };
         self.units[idx as usize] = Some(u);
         self.stats.units_spawned += 1;
@@ -668,10 +710,12 @@ impl World {
             }
         }
         self.update_units(dt);
+        self.update_plants(dt);
         self.update_colonies(dt);
         self.update_projectiles(dt);
         self.update_bits(dt);
         self.update_creeps(dt);
+        self.process_deaths();
         self.cleanup_units(dt);
         self.victory_timer += dt;
         if self.victory_timer >= 0.5 {
@@ -717,6 +761,12 @@ impl World {
             return false;
         }
         if !tdef.air && !w.targets.ground {
+            return false;
+        }
+        // seeds cannot be hit; paralysis arrows never target plants (OpenSA InvalidTargets: Plant)
+        if let Some(p) = &tdef.plant
+            && (!p.targetable || w.paralyze.is_some())
+        {
             return false;
         }
         // paralysis arrows do not re-target paralysed units
@@ -786,6 +836,15 @@ impl World {
         best.map(|(_, t)| t)
     }
 
+    /// Point to test line of sight against: a plant fills its own (blocked) cell, so a shooter only
+    /// needs to see the near edge of that cell.
+    fn sight_point(&self, from: Vec2, t: Target, tp: Vec2) -> Vec2 {
+        match t {
+            Target::Unit(id) if self.unit(id).is_some_and(|u| self.defs.units[u.kind as usize].plant.as_ref().is_some_and(|p| p.blocks)) => tp - (tp - from).normalize_or_zero() * 0.75,
+            _ => tp,
+        }
+    }
+
     /// Distance from `pos` to the edge of a target.
     fn edge_distance(&self, pos: Vec2, t: Target) -> f32 {
         match t {
@@ -807,8 +866,8 @@ impl World {
         let mut spawned_projectiles: Vec<Projectile> = Vec::new();
         for i in 0..n {
             let Some(u0) = self.units[i].as_ref() else { continue };
-            if !u0.alive() {
-                continue;
+            if !u0.alive() || self.defs.units[u0.kind as usize].plant.is_some() {
+                continue; // plants have their own update
             }
             let id = u0.id;
             let team = u0.team;
@@ -891,7 +950,7 @@ impl World {
                 let tp = self.target_pos(t).unwrap_or(pos);
                 let dist = self.edge_distance(pos, t);
                 let in_range = dist <= w.range && dist >= w.min_range;
-                let visible = def.flying || self.grid.los(pos, tp) || matches!(t, Target::Colony(_)) && dist < 2.0;
+                let visible = def.flying || self.grid.los(pos, self.sight_point(pos, t, tp)) || matches!(t, Target::Colony(_)) && dist < 2.0;
                 if in_range && (visible || matches!(w.projectile, ProjectileKind::Bullet { arc, .. } if arc > 0.05)) {
                     attack_now = true;
                     self.units[i].as_mut().unwrap().chase_timer = 0.0;
@@ -1125,6 +1184,9 @@ impl World {
                 continue;
             }
             let def = &self.defs.units[u.kind as usize];
+            if def.plant.is_some() {
+                continue; // rooted
+            }
             let mut v = u.vel;
             // separation
             scratch.clear();
@@ -1140,7 +1202,7 @@ impl World {
                     continue;
                 }
                 let odef = &self.defs.units[o.kind as usize];
-                if odef.flying != def.flying {
+                if odef.flying != def.flying || odef.plant.as_ref().is_some_and(|p| !p.blocks) {
                     continue;
                 }
                 let d = u.pos - o.pos;
@@ -1204,74 +1266,91 @@ impl World {
         }
         let tp = self.target_pos(target).unwrap_or(from);
         for k in 0..w.volley.max(1) {
-            // aim with inaccuracy scaled by distance / range
-            let dist = from.distance(tp);
-            let mut aim = tp;
-            if w.volley_spread_deg > 0.0 && w.volley > 1 {
+            let aim = if w.volley_spread_deg > 0.0 && w.volley > 1 {
                 let ang = (k as f32 / w.volley as f32) * w.volley_spread_deg.to_radians() + self.rng.random_range(-0.2..0.2);
                 let r = self.rng.random_range(0.5..w.range.max(0.6));
-                aim = from + Vec2::new(ang.cos(), ang.sin()) * r;
-            } else if w.inaccuracy > 0.0 {
-                let err = w.inaccuracy * (dist / w.range.max(0.1)).clamp(0.0, 1.0);
-                let a = self.rng.random_range(0.0..TAU);
-                let r = self.rng.random_range(0.0..err);
-                aim += Vec2::new(a.cos(), a.sin()) * r;
-            }
-            match &w.projectile {
-                ProjectileKind::Instant => {
-                    hits.push(Hit { pos: aim, weapon, team, source, direct: Some(target) });
-                }
-                kind => {
-                    let speed = match kind {
-                        ProjectileKind::Bullet { speed, .. } => *speed,
-                        ProjectileKind::Missile { speed, .. } => *speed,
-                        ProjectileKind::Bomb { fall_speed } => *fall_speed,
-                        ProjectileKind::Bouncing { speed, .. } => *speed,
-                        ProjectileKind::Instant => 1.0,
-                    };
-                    let flight = match kind {
-                        ProjectileKind::Bomb { fall_speed } => (from_h / fall_speed.max(0.1)).max(0.05),
-                        ProjectileKind::Bouncing { .. } => (from.distance(aim) / speed.max(0.1)).max(0.05),
-                        _ => (from.distance(aim) / speed.max(0.1)).max(0.05),
-                    };
-                    let bounces = if let ProjectileKind::Bouncing { bounces, .. } = kind { *bounces } else { 0 };
-                    let id = self.next_projectile;
-                    self.next_projectile += 1;
-                    out.push(Projectile {
-                        id,
-                        weapon,
-                        team,
-                        source,
-                        kind: kind.clone(),
-                        pos: from,
-                        height: from_h,
-                        start: from,
-                        start_height: from_h,
-                        aim,
-                        target: if matches!(kind, ProjectileKind::Missile { .. }) { Some(target) } else { None },
-                        t: 0.0,
-                        flight,
-                        speed,
-                        heading: dir_to_heading(aim - from),
-                        alive: true,
-                        bounces_left: bounces,
-                        hop_len: from.distance(aim),
-                    });
-                }
-            }
+                from + Vec2::new(ang.cos(), ang.sin()) * r
+            } else {
+                self.inaccurate(&w, from, tp)
+            };
+            self.launch(weapon, team, source, from, from_h, aim, Some(target), None, hits, out);
         }
+    }
+
+    /// `aim` moved by the weapon's inaccuracy, which grows with the distance up to full range.
+    fn inaccurate(&mut self, w: &WeaponDef, from: Vec2, aim: Vec2) -> Vec2 {
+        if w.inaccuracy <= 0.0 {
+            return aim;
+        }
+        let err = w.inaccuracy * (from.distance(aim) / w.range.max(0.1)).clamp(0.0, 1.0);
+        if err <= 0.0 {
+            return aim;
+        }
+        let a = self.rng.random_range(0.0..TAU);
+        let r = self.rng.random_range(0.0..err);
+        aim + Vec2::new(a.cos(), a.sin()) * r
+    }
+
+    /// One shot of `weapon` from `from` (at height `from_h`) to the ground point `aim`: an instant
+    /// hit or a projectile. `target` is the victim of instant hits and what missiles home on;
+    /// `heading` launches the shot that way instead of straight at the aim (Popcorn Plant whips).
+    #[allow(clippy::too_many_arguments)]
+    fn launch(&mut self, weapon: u16, team: u8, source: Option<UnitId>, from: Vec2, from_h: f32, aim: Vec2, target: Option<Target>, heading: Option<f32>, hits: &mut Vec<Hit>, out: &mut Vec<Projectile>) {
+        let kind = self.defs.weapons[weapon as usize].projectile.clone();
+        let speed = match &kind {
+            ProjectileKind::Instant => {
+                hits.push(Hit { pos: aim, weapon, team, source, direct: target });
+                return;
+            }
+            ProjectileKind::Bullet { speed, .. } | ProjectileKind::Missile { speed, .. } | ProjectileKind::Bouncing { speed, .. } => *speed,
+            ProjectileKind::Bomb { fall_speed } => *fall_speed,
+        };
+        let dist = from.distance(aim);
+        let flight = match &kind {
+            ProjectileKind::Bomb { fall_speed } => (from_h / fall_speed.max(0.1)).max(0.05),
+            _ => (dist / speed.max(0.1)).max(0.05),
+        };
+        let bounces = if let ProjectileKind::Bouncing { bounces, .. } = &kind { *bounces } else { 0 };
+        let id = self.next_projectile;
+        self.next_projectile += 1;
+        out.push(Projectile {
+            id,
+            weapon,
+            team,
+            source,
+            target: if matches!(kind, ProjectileKind::Missile { .. }) { target } else { None },
+            kind,
+            pos: from,
+            height: from_h,
+            start: from,
+            start_height: from_h,
+            aim,
+            t: 0.0,
+            flight,
+            speed,
+            heading: heading.unwrap_or_else(|| dir_to_heading(aim - from)),
+            alive: true,
+            bounces_left: bounces,
+            hop_len: dist,
+        });
     }
 
     fn apply_hit(&mut self, h: Hit) {
         let fire_mult = self.team_firepower(h.team);
         let w = self.defs.weapons[h.weapon as usize].clone();
-        self.events.push(SimEvent::Impact { pos: h.pos, effect: w.effect.clone(), sound: w.impact_sound.clone() });
+        if !w.effect.is_empty() || !w.impact_sound.is_empty() {
+            self.events.push(SimEvent::Impact { pos: h.pos, effect: w.effect.clone(), sound: w.impact_sound.clone() });
+        }
+        if let Some(s) = &w.spawn {
+            self.sprout(s, h.pos);
+        }
         let melee_vs_colony = self.map.rules.melee_can_damage_colonies;
         // paralysis
         if let Some(p) = &w.paralyze {
             let mut victims = Vec::new();
             for u in self.units.iter().flatten() {
-                if u.alive() && u.team != h.team && !self.defs.units[u.kind as usize].air && u.pos.distance(h.pos) <= p.radius + self.defs.units[u.kind as usize].radius {
+                let d = &self.defs.units[u.kind as usize];
+                if u.alive() && u.team != h.team && !d.air && d.plant.is_none() && u.pos.distance(h.pos) <= p.radius + d.radius {
                     victims.push(u.id);
                 }
             }
@@ -1294,7 +1373,9 @@ impl World {
             let x = d / w.spread;
             let i = x.floor() as usize;
             if i + 1 >= w.falloff.len() {
-                return w.falloff.last().copied().unwrap_or(0.0) / 100.0;
+                // the falloff list ends at the edge of the blast (OpenRA SpreadDamage range)
+                let edge = (w.falloff.len().saturating_sub(1)) as f32;
+                return if x <= edge { w.falloff.last().copied().unwrap_or(0.0) / 100.0 } else { 0.0 };
             }
             let f = x - i as f32;
             (w.falloff[i] * (1.0 - f) + w.falloff[i + 1] * f) / 100.0
@@ -1321,7 +1402,7 @@ impl World {
                     if u.team == h.team && !w.friendly_fire {
                         continue;
                     }
-                    if def.air && !w.targets.air {
+                    if def.air && !w.targets.air || def.plant.as_ref().is_some_and(|p| !p.targetable) {
                         continue;
                     }
                     let d = (u.pos.distance(h.pos) - def.radius).max(0.0);
@@ -1384,23 +1465,105 @@ impl World {
         }
         u.hp -= dmg;
         if u.hp <= 0.0 {
-            u.hp = 0.0;
-            u.state = UnitState::Dying;
-            u.anim = Anim::Death;
-            u.death_timer = 0.0;
-            u.vel = Vec2::ZERO;
-            u.attack_timer = None;
-            u.target = None;
-            let team = u.team;
+            self.kill_unit(id, Some(by_team));
+        }
+    }
+
+    /// A living unit dies: death animation, statistics (`by_team` gets the kill), a plant frees
+    /// its cell, and its death weapon / death spawn are queued for `process_deaths`.
+    fn kill_unit(&mut self, id: UnitId, by_team: Option<u8>) {
+        let Some(u) = self.unit_mut(id) else { return };
+        if !u.alive() {
+            return;
+        }
+        u.hp = 0.0;
+        u.state = UnitState::Dying;
+        u.anim = Anim::Death;
+        u.death_timer = 0.0;
+        u.vel = Vec2::ZERO;
+        u.attack_timer = None;
+        u.target = None;
+        let (team, kind, pos) = (u.team, u.kind, u.pos);
+        self.events.push(SimEvent::UnitDied(id));
+        if self.defs.units[kind as usize].plant.as_ref().is_some_and(|p| p.blocks) {
+            let cell = self.grid.cell_of(pos);
+            self.grid.set_blocked(cell, false);
+        }
+        if let Some(by) = by_team {
             self.stats.units_killed += 1;
-            self.events.push(SimEvent::UnitDied(id));
             if let Some(t) = self.teams.get_mut(team as usize) {
                 t.losses += 1;
             }
-            if let Some(t) = self.teams.get_mut(by_team as usize) {
+            if let Some(t) = self.teams.get_mut(by as usize) {
                 t.kills += 1;
             }
         }
+        self.died.push(id);
+    }
+
+    /// Death weapons (a Death Lolly's blast, which can set off the next lolly) and death spawns
+    /// (a withered seed becoming a Seed Ball, a Flying Machine's pilot) of this tick's dead.
+    fn process_deaths(&mut self) {
+        for _ in 0..8 {
+            if self.died.is_empty() {
+                return;
+            }
+            let died = std::mem::take(&mut self.died);
+            let mut hits: Vec<Hit> = Vec::new();
+            let mut out: Vec<Projectile> = Vec::new();
+            for id in died {
+                let Some(u) = self.unit(id) else { continue };
+                let def = self.defs.units[u.kind as usize].clone();
+                let (pos, team, heading) = (u.pos, u.team, u.heading);
+                if let Some(widx) = def.death_weapon.as_ref().and_then(|w| self.defs.weapon(w)) {
+                    let sound = self.defs.weapons[widx as usize].fire_sound.clone();
+                    if !sound.is_empty() {
+                        self.events.push(SimEvent::Sound { id: sound, pos });
+                    }
+                    self.launch(widx, team, Some(id), pos, 0.0, pos, None, None, &mut hits, &mut out);
+                }
+                if let Some(s) = &def.death_spawn
+                    && self.rng.random_range(0.0..1.0) < s.chance
+                    && let Some(kind) = self.defs.unit(&s.unit)
+                    && self.grid.terrain_at(pos) != TerrainKind::Water
+                    && self.grid.in_bounds(self.grid.cell_of(pos))
+                {
+                    if self.defs.units[kind as usize].plant.is_some() {
+                        let h = self.rng.random_range(0.0..TAU);
+                        self.spawn_unit(kind, 0, pos, h);
+                    } else {
+                        // a downed pilot carries on like a pirate
+                        let nid = self.spawn_unit(kind, team, pos, heading);
+                        if let Some(c) = self.colonies.iter().filter(|c| c.team != 0 && c.active()).min_by(|a, b| a.pos.distance(pos).total_cmp(&b.pos.distance(pos))) {
+                            let target = c.pos;
+                            self.issue_uncontrolled(nid, Order::AttackMove(target));
+                        }
+                    }
+                }
+            }
+            for h in hits {
+                self.apply_hit(h);
+            }
+            for p in out {
+                self.events.push(SimEvent::ProjectileSpawned(p.id));
+                self.projectiles.push(p);
+            }
+        }
+    }
+
+    /// A seed lands: it takes root if its cell is free open ground (OpenSA SpawnActor warhead).
+    fn sprout(&mut self, unit: &str, pos: Vec2) {
+        let Some(kind) = self.defs.unit(unit) else { return };
+        let cell = self.grid.cell_of(pos);
+        if !self.grid.in_bounds(cell) || self.grid.is_blocked(cell) {
+            return;
+        }
+        let at = self.grid.center(cell);
+        if self.living_units().any(|u| u.pos.distance(at) < 0.75 && !self.defs.units[u.kind as usize].flying) {
+            return;
+        }
+        let heading = self.rng.random_range(0.0..TAU);
+        self.spawn_unit(kind, 0, at, heading);
     }
 
     fn damage_colony(&mut self, cid: u32, dmg: f32, _by_team: u8) {
@@ -1540,6 +1703,11 @@ impl World {
                             c.production.kind = def.produces.first().and_then(|p| self.defs.unit(p));
                         }
                         self.stats.captures += 1;
+                        if let Some(t) = self.teams.get_mut(best_team as usize)
+                            && best_team != 0
+                        {
+                            t.takeovers += 1;
+                        }
                         self.events.push(SimEvent::ColonyCaptured { colony: ci as u32, team: best_team });
                         self.events.push(SimEvent::Sound { id: "colony_captured".into(), pos });
                     } else {
@@ -1670,7 +1838,7 @@ impl World {
     fn update_projectiles(&mut self, dt: f32) {
         let mut hits: Vec<Hit> = Vec::new();
         let mut removed = Vec::new();
-        let mut rehop: Vec<(usize, Vec2)> = Vec::new();
+        let mut rehop: Vec<(usize, Vec2, bool)> = Vec::new();
         for (pi, p) in self.projectiles.iter_mut().enumerate() {
             if !p.alive {
                 continue;
@@ -1684,13 +1852,22 @@ impl World {
                     p.height = p.start_height * (1.0 - f) + apex * (PI * f).sin();
                     p.heading = dir_to_heading(p.aim - p.start);
                     if f >= 1.0 {
-                        if let ProjectileKind::Bouncing { bounce_factor, .. } = p.kind
+                        if let ProjectileKind::Bouncing { bounce_factor, split, .. } = p.kind
                             && p.bounces_left > 0
                         {
                             p.bounces_left -= 1;
                             let dir = (p.aim - p.start).normalize_or_zero();
-                            let next = p.aim + dir * p.hop_len * bounce_factor;
-                            rehop.push((pi, next));
+                            if split {
+                                // one ball goes on 45 degrees to one side, a new one 45 degrees to the other
+                                let (s, c) = std::f32::consts::FRAC_PI_4.sin_cos();
+                                let a = Vec2::new(dir.x * c - dir.y * s, dir.x * s + dir.y * c);
+                                let b = Vec2::new(dir.x * c + dir.y * s, -dir.x * s + dir.y * c);
+                                // (the copy is taken before the original is re-aimed)
+                                rehop.push((pi, p.aim + b * p.hop_len * bounce_factor, true));
+                                rehop.push((pi, p.aim + a * p.hop_len * bounce_factor, false));
+                            } else {
+                                rehop.push((pi, p.aim + dir * p.hop_len * bounce_factor, false));
+                            }
                             continue;
                         }
                         p.alive = false;
@@ -1716,11 +1893,14 @@ impl World {
                         removed.push(p.id);
                     }
                 }
-                ProjectileKind::Bomb { fall_speed } => {
-                    p.height -= fall_speed * dt;
-                    if p.height <= 0.0 {
+                ProjectileKind::Bomb { .. } => {
+                    // dropped, so it keeps the sideways throw it was given and falls ever faster
+                    let f = (p.t / p.flight).clamp(0.0, 1.0);
+                    p.pos = p.start.lerp(p.aim, f);
+                    p.height = p.start_height * (1.0 - f * f);
+                    if f >= 1.0 {
                         p.alive = false;
-                        hits.push(Hit { pos: p.pos, weapon: p.weapon, team: p.team, source: p.source, direct: None });
+                        hits.push(Hit { pos: p.aim, weapon: p.weapon, team: p.team, source: p.source, direct: None });
                         removed.push(p.id);
                     }
                 }
@@ -1730,16 +1910,30 @@ impl World {
                 }
             }
         }
-        for (pi, next) in rehop {
-            let p = &mut self.projectiles[pi];
+        let mut split_off: Vec<Projectile> = Vec::new();
+        for (pi, next, new_ball) in rehop {
             let next = self.grid.clamp(next);
-            p.start = p.aim;
+            let mut p = self.projectiles[pi].clone();
+            let landed = p.aim;
+            p.start = landed;
             p.aim = next;
             p.hop_len = p.start.distance(p.aim);
             p.flight = (p.hop_len / p.speed.max(0.1)).max(0.05);
             p.t = 0.0;
             p.start_height = 0.0;
-            self.events.push(SimEvent::Sound { id: "bounce".into(), pos: p.start });
+            p.heading = dir_to_heading(p.aim - p.start);
+            if new_ball {
+                p.id = self.next_projectile;
+                self.next_projectile += 1;
+                split_off.push(p);
+            } else {
+                self.projectiles[pi] = p;
+                self.events.push(SimEvent::Sound { id: "bounce".into(), pos: landed });
+            }
+        }
+        for p in split_off {
+            self.events.push(SimEvent::ProjectileSpawned(p.id));
+            self.projectiles.push(p);
         }
         self.projectiles.retain(|p| p.alive);
         for id in removed {
@@ -1777,20 +1971,54 @@ impl World {
             u.heading = dir_to_heading(dir);
             u.anim = Anim::Move;
             u.reload -= dt;
-            if u.reload <= 0.0
-                && let Some(widx) = def.weapon.as_ref().and_then(|w| self.defs.weapon(w))
-            {
-                let w = self.defs.weapons[widx as usize].clone();
-                let u = self.units[i].as_mut().unwrap();
-                u.reload = w.reload;
-                let pos = u.pos;
-                let team = u.team;
-                let ahead = pos + dir * w.range.min(3.0);
-                // bomb-type weapons drop at the flyer's position, others are thrown ahead
-                let drop_target = Target::Unit(id);
-                let aim_pos = if matches!(w.projectile, ProjectileKind::Bomb { .. }) { pos } else { ahead };
-                let _ = drop_target;
-                self.fire_weapon_at_pos(widx, team, Some(id), pos, def.altitude, aim_pos, &mut hits, &mut spawned);
+            u.phase += dt;
+            let Some(widx) = def.weapon.as_ref().and_then(|w| self.defs.weapon(w)) else { continue };
+            let Some(f) = def.flyer.clone() else {
+                // no pattern: drop the weapon every reload, bombs straight down, the rest thrown ahead
+                if u.reload <= 0.0 {
+                    let w = self.defs.weapons[widx as usize].clone();
+                    u.reload = w.reload;
+                    let (pos, team) = (u.pos, u.team);
+                    let aim = if matches!(w.projectile, ProjectileKind::Bomb { .. }) { pos } else { pos + dir * w.range.min(3.0) };
+                    self.stats.shots += 1;
+                    self.launch(widx, team, Some(id), pos, def.altitude, aim, None, None, &mut hits, &mut spawned);
+                }
+                continue;
+            };
+            // OpenSA bombing rhythm: drop for `drop_time`, rest for `rest_time`
+            let cycle = f.drop_time + f.rest_time;
+            let dropping = f.rest_time <= 0.0 || cycle <= 0.0 || u.phase % cycle < f.drop_time;
+            if !dropping || u.reload > 0.0 {
+                continue;
+            }
+            let aim_local = f.aims.get(u.drops as usize % f.aims.len().max(1)).copied().unwrap_or(Vec2::ZERO);
+            u.drops = u.drops.wrapping_add(1);
+            u.burst_left = u.burst_left.saturating_sub(1);
+            if u.burst_left > 0 {
+                u.reload = f.burst_gap;
+            } else {
+                u.burst_left = f.burst.max(1);
+                u.reload = f.interval;
+            }
+            u.attack_seq = u.attack_seq.wrapping_add(1);
+            let (pos, team, heading) = (u.pos, u.team, u.heading);
+            // the flyer's frame: forward along its heading, right = forward x up
+            let fwd = heading_to_dir(heading);
+            let right = Vec2::new(-fwd.y, fwd.x);
+            let spot = pos + right * aim_local.x + fwd * aim_local.y;
+            let w = self.defs.weapons[widx as usize].clone();
+            if !w.fire_sound.is_empty() {
+                self.events.push(SimEvent::Sound { id: w.fire_sound.clone(), pos });
+            }
+            for _ in 0..f.shots.max(1) {
+                let aim = self.inaccurate(&w, pos, spot);
+                self.stats.shots += 1;
+                self.launch(widx, team, Some(id), pos, def.altitude, aim, None, None, &mut hits, &mut spawned);
+            }
+            if let Some(ew) = f.extra_weapon.as_ref().and_then(|w| self.defs.weapon(w)) {
+                let e = self.defs.weapons[ew as usize].clone();
+                let aim = self.inaccurate(&e, pos, spot);
+                self.launch(ew, team, Some(id), pos, def.altitude, aim, None, None, &mut hits, &mut spawned);
             }
         }
         for id in gone {
@@ -1803,8 +2031,10 @@ impl World {
             self.events.push(SimEvent::ProjectileSpawned(p.id));
             self.projectiles.push(p);
         }
-        // spawners
-        if self.map.rules.flyers && !self.map.rules.flyer_kinds.is_empty() {
+        // the level's plants and flyers come and go
+        if !self.map.rules.creeps.is_empty() {
+            self.update_creep_pools(dt);
+        } else if self.map.rules.flyers && !self.map.rules.flyer_kinds.is_empty() {
             self.flyer_timer -= dt;
             if self.flyer_timer <= 0.0 {
                 self.flyer_timer = self.map.rules.flyer_interval * self.rng.random_range(0.8..1.2);
@@ -1823,25 +2053,88 @@ impl World {
         }
     }
 
-    /// Spawn a neutral flyer at a random map edge heading across the map.
+    /// Spawn a neutral flyer that crosses the whole map. As in OpenSA's CreepFlyerSpawner it
+    /// passes over a random cell on one of eight headings, entering at one edge and leaving at the
+    /// opposite one.
     pub fn spawn_flyer(&mut self, kind: u16) -> UnitId {
         let size = self.grid.size();
-        let side = self.rng.random_range(0..4);
-        let t = self.rng.random_range(0.15..0.85);
-        let (start, end) = match side {
-            0 => (Vec2::new(-2.0, size.y * t), Vec2::new(size.x + 2.0, size.y * self.rng.random_range(0.15..0.85))),
-            1 => (Vec2::new(size.x + 2.0, size.y * t), Vec2::new(-2.0, size.y * self.rng.random_range(0.15..0.85))),
-            2 => (Vec2::new(size.x * t, -2.0), Vec2::new(size.x * self.rng.random_range(0.15..0.85), size.y + 2.0)),
-            _ => (Vec2::new(size.x * t, size.y + 2.0), Vec2::new(size.x * self.rng.random_range(0.15..0.85), -2.0)),
-        };
-        let dir = (end - start).normalize();
-        let id = self.spawn_unit(kind, 0, start, dir_to_heading(dir));
+        let through = Vec2::new(self.rng.random_range(0.0..size.x), self.rng.random_range(0.0..size.y));
+        let heading = self.rng.random_range(0..8) as f32 * TAU / 8.0;
+        let dir = heading_to_dir(heading);
+        // back along the heading to the map edge
+        let edge_t = |p: f32, d: f32, max: f32| if d > 1e-4 { p / d } else if d < -1e-4 { (p - max) / d } else { f32::INFINITY };
+        let back = edge_t(through.x, dir.x, size.x).min(edge_t(through.y, dir.y, size.y));
+        let start = through - dir * back;
+        let id = self.spawn_unit(kind, 0, start, heading);
+        let first = self.rng.random_range(0.2..1.0);
         if let Some(u) = self.unit_mut(id) {
             u.cruise = Some(dir);
-            u.reload = 2.0;
+            u.reload = first;
         }
         self.events.push(SimEvent::FlyerSpawn(id));
         id
+    }
+
+    /// Spawn timers of the level's creep pools: each pool tops itself up by one creep per interval
+    /// (OpenSA PlantSpawner / CreepFlyerSpawner, with the original level's counts as the limits).
+    fn update_creep_pools(&mut self, dt: f32) {
+        let n = self.map.rules.creeps.len();
+        if self.creep_timers.len() != n {
+            self.creep_timers = (0..n)
+                .map(|i| {
+                    let (a, b) = self.map.rules.creeps[i].first;
+                    if b > a { self.rng.random_range(a..b) } else { a }
+                })
+                .collect();
+        }
+        for i in 0..n {
+            self.creep_timers[i] -= dt;
+            if self.creep_timers[i] > 0.0 {
+                continue;
+            }
+            let pool = self.map.rules.creeps[i].clone();
+            let (a, b) = pool.interval;
+            self.creep_timers[i] = if b > a { self.rng.random_range(a..b) } else { a.max(0.5) };
+            let kinds: Vec<u16> = pool.units.iter().filter_map(|u| self.defs.unit(u)).collect();
+            if kinds.is_empty() {
+                continue;
+            }
+            let alive = self.living_units().filter(|u| kinds.contains(&u.kind)).count() as u32;
+            if alive >= pool.count {
+                continue;
+            }
+            let kind = kinds[self.rng.random_range(0..kinds.len())];
+            let def = &self.defs.units[kind as usize];
+            if def.flying {
+                self.spawn_flyer(kind);
+            } else if def.plant.is_some() {
+                if let Some(cell) = self.free_plant_cell() {
+                    let heading = self.rng.random_range(0.0..TAU);
+                    self.spawn_unit(kind, 0, cell, heading);
+                }
+            } else {
+                let p = self.free_plant_cell().unwrap_or(self.grid.size() * 0.5);
+                let heading = self.rng.random_range(0.0..TAU);
+                self.spawn_unit(kind, 0, p, heading);
+            }
+        }
+    }
+
+    /// A random free cell of open ground with nobody on it (OpenSA PlantSpawner: 100 tries).
+    fn free_plant_cell(&mut self) -> Option<Vec2> {
+        let size = self.grid.size();
+        for _ in 0..100 {
+            let c = IVec2::new(self.rng.random_range(0..size.x as i32), self.rng.random_range(0..size.y as i32));
+            if self.grid.is_blocked(c) {
+                continue;
+            }
+            let p = self.grid.center(c);
+            if self.living_units().any(|u| !self.defs.units[u.kind as usize].flying && u.pos.distance(p) < 1.0) || self.bits.iter().any(|b| b.alive && b.end.distance(p) < 0.75) {
+                continue;
+            }
+            return Some(p);
+        }
+        None
     }
 
     /// Pirate ants emerge from an ant hole (random free spot), 1..6 of them (OpenSA shares).
@@ -1885,48 +2178,207 @@ impl World {
         self.apply_order(id, order);
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn fire_weapon_at_pos(&mut self, weapon: u16, team: u8, source: Option<UnitId>, from: Vec2, from_h: f32, aim: Vec2, hits: &mut Vec<Hit>, out: &mut Vec<Projectile>) {
-        // Fire at a ground position: emulate with a temporary target-less projectile.
-        let w = self.defs.weapons[weapon as usize].clone();
-        self.stats.shots += 1;
-        match &w.projectile {
-            ProjectileKind::Instant => hits.push(Hit { pos: aim, weapon, team, source, direct: None }),
-            kind => {
-                let speed = match kind {
-                    ProjectileKind::Bullet { speed, .. } | ProjectileKind::Missile { speed, .. } | ProjectileKind::Bouncing { speed, .. } => *speed,
-                    ProjectileKind::Bomb { fall_speed } => *fall_speed,
-                    ProjectileKind::Instant => 1.0,
-                };
-                let flight = match kind {
-                    ProjectileKind::Bomb { fall_speed } => (from_h / fall_speed.max(0.1)).max(0.05),
-                    _ => (from.distance(aim) / speed.max(0.1)).max(0.05),
-                };
-                let bounces = if let ProjectileKind::Bouncing { bounces, .. } = kind { *bounces } else { 0 };
-                let id = self.next_projectile;
-                self.next_projectile += 1;
-                out.push(Projectile {
-                    id,
-                    weapon,
-                    team,
-                    source,
-                    kind: kind.clone(),
-                    pos: from,
-                    height: from_h,
-                    start: from,
-                    start_height: from_h,
-                    aim,
-                    target: None,
-                    t: 0.0,
-                    flight,
-                    speed,
-                    heading: dir_to_heading(aim - from),
-                    alive: true,
-                    bounces_left: bounces,
-                    hop_len: from.distance(aim),
-                });
+    // -----------------------------------------------------------------------------------------
+    // neutral creep plants (OpenSA creep-plants.yaml, ^CoreNeutralTowerCreep)
+    // -----------------------------------------------------------------------------------------
+    /// Is an enemy of the creeps (any player's creature, or a player's colony) within `range` of
+    /// `pos`? This is what sets off Seed Balls and Death Lollies (OpenSA ProximityExternalCondition
+    /// on every creature and building, measured centre to centre).
+    fn enemy_near(&self, pos: Vec2, range: f32) -> bool {
+        let mut scratch = Vec::new();
+        self.spatial.query(pos, range + 0.5, &mut scratch);
+        let near_unit = scratch.iter().any(|idx| {
+            self.units[*idx as usize].as_ref().is_some_and(|u| u.alive() && u.team != 0 && u.pos.distance(pos) <= range)
+        });
+        near_unit || self.colonies.iter().any(|c| c.active() && c.team != 0 && c.pos.distance(pos) <= range)
+    }
+
+    fn update_plants(&mut self, dt: f32) {
+        let mut hits: Vec<Hit> = Vec::new();
+        let mut out: Vec<Projectile> = Vec::new();
+        let mut blow_up: Vec<UnitId> = Vec::new();
+        let mut withered: Vec<UnitId> = Vec::new();
+        for i in 0..self.units.len() {
+            let Some(u) = self.units[i].as_ref() else { continue };
+            if !u.alive() {
+                continue;
+            }
+            let def = &self.defs.units[u.kind as usize];
+            let Some(plant) = def.plant.clone() else { continue };
+            let (id, pos, max_hp) = (u.id, u.pos, def.hp);
+            let weapon_idx = self.weapon_of(u);
+            let attack_anim = def.attack_anim_time;
+            {
+                let u = self.units[i].as_mut().unwrap();
+                u.age += dt;
+                u.reload = (u.reload - dt).max(0.0);
+                u.scan_timer -= dt;
+                u.vel = Vec2::ZERO;
+                if plant.decay_per_s > 0.0 {
+                    u.hp -= plant.decay_per_s * dt;
+                    if u.hp <= 0.0 {
+                        withered.push(id);
+                        continue;
+                    }
+                } else if u.hp < max_hp {
+                    u.hp = (u.hp + plant.regen_per_s * dt).min(max_hp);
+                }
+                // still growing, or hurt badly enough to stop (it heals and carries on)
+                if u.age < plant.grow_time || u.hp < max_hp * plant.injured_below {
+                    u.anim = Anim::Idle;
+                    u.attack_timer = None;
+                    u.target = None;
+                    continue;
+                }
+            }
+            match plant.attack {
+                PlantAttack::Passive => {}
+                PlantAttack::Mine { trigger } => {
+                    if self.enemy_near(pos, trigger) {
+                        blow_up.push(id);
+                    }
+                }
+                PlantAttack::Burst { trigger, count, ref seed_weapon } => {
+                    let Some(widx) = weapon_idx else { continue };
+                    let triggered = self.enemy_near(pos, trigger);
+                    let u = self.units[i].as_mut().unwrap();
+                    if !triggered {
+                        u.anim = Anim::Idle;
+                        continue;
+                    }
+                    u.anim = Anim::Attack;
+                    if u.reload > 0.0 {
+                        continue;
+                    }
+                    let w = self.defs.weapons[widx as usize].clone();
+                    u.reload = w.reload;
+                    u.attack_seq = u.attack_seq.wrapping_add(1);
+                    if !w.fire_sound.is_empty() {
+                        self.events.push(SimEvent::Sound { id: w.fire_sound.clone(), pos });
+                    }
+                    // shrapnel thrown at random spots all round (OpenSA AimChance 0)
+                    let mut shots: Vec<(u16, Vec2)> = Vec::new();
+                    for _ in 0..count {
+                        shots.push((widx, self.random_spot(pos, w.min_range, w.range)));
+                    }
+                    if let Some(sw) = seed_weapon.as_ref().and_then(|s| self.defs.weapon(s)) {
+                        let r = self.defs.weapons[sw as usize].range;
+                        shots.push((sw, self.random_spot(pos, 0.0, r)));
+                    }
+                    for (wi, aim) in shots {
+                        self.stats.shots += 1;
+                        self.launch(wi, 0, Some(id), pos, 0.45, aim, None, None, &mut hits, &mut out);
+                    }
+                }
+                PlantAttack::Aimed | PlantAttack::Radial { .. } | PlantAttack::Vortex { .. } => {
+                    let Some(widx) = weapon_idx else { continue };
+                    let w = self.defs.weapons[widx as usize].clone();
+                    // keep or find a target in range
+                    let mut target = self.units[i].as_ref().unwrap().target;
+                    if let Some(t) = target
+                        && (!self.target_valid(&w, 0, t) || self.edge_distance(pos, t) > w.range)
+                    {
+                        target = None;
+                    }
+                    if target.is_none() && self.units[i].as_ref().unwrap().scan_timer <= 0.0 {
+                        self.units[i].as_mut().unwrap().scan_timer = self.defs.rules.auto_target_interval;
+                        target = self.find_target(pos, 0, &w, w.range);
+                    }
+                    let u = self.units[i].as_mut().unwrap();
+                    u.target = target;
+                    let Some(t) = target else {
+                        u.anim = Anim::Idle;
+                        u.attack_timer = None;
+                        continue;
+                    };
+                    if let PlantAttack::Vortex { arms, deg_per_s } = plant.attack {
+                        // a spinning spray: shots aimed at points circling the plant at full range
+                        u.anim = Anim::Attack;
+                        u.spin = (u.spin + deg_per_s.to_radians() * dt) % TAU;
+                        if u.reload > 0.0 {
+                            continue;
+                        }
+                        u.reload = w.reload;
+                        u.attack_seq = u.attack_seq.wrapping_add(1);
+                        let spin = u.spin;
+                        for k in 0..arms.max(1) {
+                            let a = spin + k as f32 * TAU / arms.max(1) as f32;
+                            let aim = pos + heading_to_dir(a) * w.range;
+                            self.stats.shots += 1;
+                            self.launch(widx, 0, Some(id), pos, 0.5, aim, None, None, &mut hits, &mut out);
+                        }
+                        continue;
+                    }
+                    // wind up (attack animation), then shoot
+                    match u.attack_timer {
+                        None => {
+                            if u.reload <= 0.0 {
+                                u.attack_timer = Some(0.0);
+                                u.shot_released = false;
+                                u.attack_seq = u.attack_seq.wrapping_add(1);
+                                u.anim = Anim::Attack;
+                                self.events.push(SimEvent::AttackStarted { unit: id, target: t, seq: u.attack_seq });
+                            } else {
+                                u.anim = Anim::Idle;
+                            }
+                        }
+                        Some(time) => {
+                            let time = time + dt;
+                            u.attack_timer = Some(time);
+                            if !u.shot_released && time >= w.fire_delay {
+                                u.shot_released = true;
+                                u.reload = w.reload;
+                                let base = u.heading;
+                                match plant.attack {
+                                    PlantAttack::Radial { count } => {
+                                        // every direction at once; the homing shots curl round onto the target
+                                        if !w.fire_sound.is_empty() {
+                                            self.events.push(SimEvent::Sound { id: w.fire_sound.clone(), pos });
+                                        }
+                                        let tp = self.target_pos(t).unwrap_or(pos);
+                                        for k in 0..count.max(1) {
+                                            let h = base + k as f32 * TAU / count.max(1) as f32;
+                                            let from = pos + heading_to_dir(h) * 0.35;
+                                            let aim = self.inaccurate(&w, pos, tp);
+                                            self.stats.shots += 1;
+                                            self.launch(widx, 0, Some(id), from, 0.55, aim, Some(t), Some(h), &mut hits, &mut out);
+                                        }
+                                    }
+                                    _ => self.fire_weapon(widx, 0, Some(id), pos, 0.55, t, &mut hits, &mut out),
+                                }
+                            }
+                            let u = self.units[i].as_mut().unwrap();
+                            if time >= attack_anim.max(w.fire_delay + 0.05) {
+                                u.attack_timer = None;
+                                u.anim = Anim::Idle;
+                            }
+                        }
+                    }
+                }
             }
         }
+        for id in withered {
+            self.kill_unit(id, None);
+        }
+        for id in blow_up {
+            if self.unit(id).is_some_and(|u| u.alive()) {
+                self.kill_unit(id, None);
+            }
+        }
+        for h in hits {
+            self.apply_hit(h);
+        }
+        for p in out {
+            self.events.push(SimEvent::ProjectileSpawned(p.id));
+            self.projectiles.push(p);
+        }
+    }
+
+    /// A random ground point between `min` and `max` cells from `pos`, inside the map.
+    fn random_spot(&mut self, pos: Vec2, min: f32, max: f32) -> Vec2 {
+        let a = self.rng.random_range(0.0..TAU);
+        let r = if max > min { self.rng.random_range(min..max) } else { max };
+        self.grid.clamp(pos + heading_to_dir(a) * r)
     }
 
     // -----------------------------------------------------------------------------------------

@@ -97,6 +97,9 @@ const PROJECTILES: &[(&str, f32)] = &[
     ("WEAPON_BOUNCEBOMB", 0.08),
     ("WEAPON_GOBSTOPPER", 0.08),
     ("WEAPON_PUFFBALL", 0.1),
+    ("WEAPON_WHIP", 0.1),
+    ("WEAPON_THORN", 0.1),
+    ("WEAPON_FRECKLE", 0.1),
 ];
 
 /// The explosion of a simulation effect id.
@@ -130,6 +133,10 @@ fn projectile_for(weapon: &str) -> Option<&'static str> {
         "wasp_sonic" => "WEAPON_SONIC",
         "wasp_mg" | "colony_wasp_mg" => "WEAPON_SMALL",
         "beetle_shrapnel" | "popcorn" => "WEAPON_MEDIUM",
+        "plant_popcorn" => "WEAPON_WHIP",
+        "plant_thorn" => "WEAPON_THORN",
+        "plant_freckle" => "WEAPON_FRECKLE",
+        "plant_puff" | "plant_seed_throw" | "moth_seed" => "WEAPON_PUFFBALL",
         "beetle_cannon" | "colony_beetle_cannon" => "WEAPON_CANNON",
         "dragonfly_bomb" => "WEAPON_BRAKEBOMB",
         "fly_bomb" => "WEAPON_BOUNCEBOMB",

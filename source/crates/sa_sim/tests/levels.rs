@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use sa_sim::{Controller, Defs, MapDef, World};
 
 fn assets() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    // the packaged game keeps `assets` beside `source`; a plain checkout has it inside
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    ["../../assets", "../../../assets"].iter().map(|r| crate_dir.join(r)).find(|p| p.join("data").is_dir()).unwrap_or_else(|| crate_dir.join("../../assets"))
 }
 
 #[test]

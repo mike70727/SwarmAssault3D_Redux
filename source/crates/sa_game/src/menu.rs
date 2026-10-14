@@ -97,17 +97,18 @@ impl Plugin for MenuPlugin {
 
 /// One entry of the level list.
 #[derive(Clone)]
-struct MapEntry {
-    file: String,
-    label: String,
+pub(crate) struct MapEntry {
+    pub file: String,
+    pub label: String,
     /// (group, number, name): campaign levels by number, then custom missions, skirmish maps, demos.
     key: (u8, u32, String),
-    number: Option<u32>,
-    category: String,
+    pub number: Option<u32>,
+    pub category: String,
+    pub name: String,
 }
 
 /// Maps available in assets/data/maps, sorted for the level list.
-fn list_maps() -> Vec<MapEntry> {
+pub(crate) fn list_maps() -> Vec<MapEntry> {
     let dir = std::path::PathBuf::from(asset_root()).join("data/maps");
     let mut out = Vec::new();
     if let Ok(rd) = std::fs::read_dir(&dir) {
@@ -119,7 +120,7 @@ fn list_maps() -> Vec<MapEntry> {
             let file = p.file_name().unwrap().to_string_lossy().to_string();
             let def = std::fs::read_to_string(&p).ok().and_then(|t| sa_sim::MapDef::from_str(&t).ok());
             let Some(m) = def else {
-                out.push(MapEntry { file: file.clone(), label: file.clone(), key: (4, 0, file), number: None, category: String::new() });
+                out.push(MapEntry { file: file.clone(), label: file.clone(), key: (4, 0, file.clone()), number: None, category: String::new(), name: file });
                 continue;
             };
             let (group, number, label) = match (m.category.as_str(), m.number) {
@@ -128,16 +129,19 @@ fn list_maps() -> Vec<MapEntry> {
                 ("conquest", _) => (2, 0, format!("Skirmish:  {}", m.name)),
                 _ => (3, 0, format!("Demo:  {} ({}x{})", m.name, m.width, m.height)),
             };
-            out.push(MapEntry { file, label, key: (group, number, m.name.clone()), number: if m.category == "campaign" { m.number } else { None }, category: m.category.clone() });
+            out.push(MapEntry { file, label, key: (group, number, m.name.clone()), number: if m.category == "campaign" { m.number } else { None }, category: m.category.clone(), name: m.name.clone() });
         }
     }
     out.sort_by(|a, b| a.key.cmp(&b.key));
     out
 }
 
-fn setup_menu(mut commands: Commands, page: Res<MenuPage>, progress: Res<Progress>, settings: Res<Settings>, ui: Res<UiAssets>) {
+fn setup_menu(mut commands: Commands, page: Res<MenuPage>, progress: Res<Progress>, settings: Res<Settings>, ui: Res<UiAssets>, orig: Option<Res<crate::orig_ui::OrigUi>>) {
     commands.spawn((Camera2d, DespawnOnExit(AppState::Menu)));
-    build_menu(&mut commands, page.0, &progress, settings.unlock_all_levels, &ui);
+    // with the original game its own menus are used (orig_menu.rs)
+    if orig.is_none() {
+        build_menu(&mut commands, page.0, &progress, settings.unlock_all_levels, &ui);
+    }
 }
 
 

@@ -107,7 +107,8 @@ fn load_assets(
         let rel = format!("models/{name}.glb");
         let exists = root.join(&rel).exists();
         let gltf = if exists { Some(asset_server.load::<Gltf>(rel.clone())) } else { None };
-        if !exists {
+        // creep plants are built in code (plants.rs) unless a model file is supplied
+        if !exists && !name.starts_with("plant_") {
             warn!("model {rel} not found: using placeholder geometry");
         }
         models.insert(name, ModelAssets { path: rel, gltf, scene: None, graph: None, clips: HashMap::new(), clip_len: HashMap::new(), ready: false, missing: !exists });

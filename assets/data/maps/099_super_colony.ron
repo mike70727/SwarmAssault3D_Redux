@@ -259,6 +259,8 @@
     rules: (
         melee_can_damage_colonies: false,
         unit_cap: Some(150),
+        // neutral creeps (original level's Misc actors): none in this level
+        creeps: [],
         flyers: false,
         flyer_kinds: [],
         flyer_interval: 45.0,

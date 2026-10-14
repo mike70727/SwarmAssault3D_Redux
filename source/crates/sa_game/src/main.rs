@@ -13,8 +13,10 @@ mod hud;
 mod menu;
 mod console;
 mod orig_fx;
+mod orig_menu;
 mod orig_ui;
 mod original;
+mod plants;
 mod progress;
 mod screenshot;
 mod selection;
@@ -204,7 +206,7 @@ fn main() {
         .add_plugins(SystemInformationDiagnosticsPlugin)
         .insert_state(initial)
         // first: the interface, ground and audio plugins look for the original game's files
-        .add_plugins((original::OriginalPlugin, orig_ui::OrigUiPlugin, orig_fx::OrigFxPlugin, ground::GroundPlugin))
+        .add_plugins((original::OriginalPlugin, orig_ui::OrigUiPlugin, orig_menu::OrigMenuPlugin, orig_fx::OrigFxPlugin, ground::GroundPlugin, plants::PlantsPlugin))
         .add_plugins((
             controls::ControlsPlugin,
             assets::GameAssetsPlugin,

@@ -417,7 +417,12 @@
     rules: (
         melee_can_damage_colonies: false,
         unit_cap: Some(150),
-        flyers: true,
+        // neutral creeps (OpenSA spawner settings): up to `count` at once, one more every `interval` seconds
+        creeps: [
+            (units: ["plant_seedball"], count: 20, interval: (13.0, 21.0), first: (13.0, 21.0)),
+            (units: ["neutral_spawn_moth"], count: 1, interval: (25.0, 30.0), first: (25.0, 30.0)),
+        ],
+        flyers: false,
         flyer_kinds: ["neutral_spawn_moth"],
         flyer_interval: 45.0,
         pirates: true,

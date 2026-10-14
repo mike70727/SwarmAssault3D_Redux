@@ -56,7 +56,16 @@ pub enum ProjectileKind {
     Bomb { fall_speed: f32 },
     /// Bouncing ball (Desert Fly bombs, Flying Machine gobstoppers): lobbed, bounces `bounces`
     /// times (each bounce travels `bounce_factor` of the previous hop) and explodes at rest.
-    Bouncing { speed: f32, arc: f32, bounces: u32, bounce_factor: f32 },
+    /// `split`: every bounce splits the ball in two, 45 degrees either side (Desert Fly: OpenSA
+    /// Split warhead, one bomb becomes four explosions).
+    Bouncing {
+        speed: f32,
+        arc: f32,
+        bounces: u32,
+        bounce_factor: f32,
+        #[serde(default)]
+        split: bool,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -98,6 +107,9 @@ pub struct WeaponDef {
     pub impact_sound: String,
     /// Can the weapon hurt units of the firing team through splash?
     pub friendly_fire: bool,
+    /// Unit that grows where the shot lands, if that spot is free open ground (the seeds thrown by
+    /// Seed Balls and Spawn Moths).
+    pub spawn: Option<String>,
     pub source: String,
 }
 
@@ -122,9 +134,93 @@ impl Default for WeaponDef {
             fire_sound: String::new(),
             impact_sound: String::new(),
             friendly_fire: false,
+            spawn: None,
             source: String::new(),
         }
     }
+}
+
+/// How a neutral creep plant attacks (OpenSA creep-plants.yaml; docs/GAMEPLAY_RESEARCH.md).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum PlantAttack {
+    /// Never attacks (seeds).
+    Passive,
+    /// Shoots its weapon at the nearest enemy in range (Thorn Bush).
+    Aimed,
+    /// Fires its weapon in `count` evenly spaced directions at once; the homing shots curl round
+    /// onto the target (Popcorn Plant: OpenSA AttackRadial with eight armaments).
+    Radial { count: u32 },
+    /// While an enemy is in range, lobs its weapon at `arms` points that circle the plant at weapon
+    /// range (Choc Freckle: OpenSA AttackVortex, three armaments turning 6 facings per tick).
+    Vortex { arms: u32, deg_per_s: f32 },
+    /// While an enemy creature or colony is within `trigger` cells, throws `count` shots at random
+    /// spots within weapon range every reload, plus one `seed_weapon` shot (Seed Ball: OpenSA
+    /// SpawnsShrapnel, six puffs and a seed every 20 ticks, set off from 5 cells).
+    Burst { trigger: f32, count: u32, seed_weapon: Option<String> },
+    /// Blows itself up (its `death_weapon`) when an enemy creature or colony comes within `trigger`
+    /// cells (Death Lolly: OpenSA KillsSelf + Explodes, set off from 2 cells).
+    Mine { trigger: f32 },
+}
+
+/// Neutral creep plant behaviour (OpenSA `^CoreNeutralTowerCreep` + creep-plants.yaml).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct PlantDef {
+    /// Seconds the plant takes to grow; it cannot attack before (OpenSA WithGrowAnimation).
+    pub grow_time: f32,
+    pub attack: PlantAttack,
+    /// Stops attacking while its HP is below this fraction (OpenSA "injured" = Heavy damage state).
+    pub injured_below: f32,
+    /// HP regained per second while hurt (OpenSA ChangesHealth: +50 every 5 ticks).
+    pub regen_per_s: f32,
+    /// HP lost per second (seeds wither: -1000 every 5 ticks, gone after 10 s).
+    pub decay_per_s: f32,
+    /// Can weapons hit it? (seeds cannot)
+    pub targetable: bool,
+    /// Occupies its map cell: ground units walk round it.
+    pub blocks: bool,
+}
+
+impl Default for PlantDef {
+    fn default() -> Self {
+        Self { grow_time: 5.0, attack: PlantAttack::Aimed, injured_below: 0.5, regen_per_s: 250.0, decay_per_s: 0.0, targetable: true, blocks: true }
+    }
+}
+
+/// Bombing pattern of a neutral flyer (OpenSA creep-units.yaml).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct FlyerDef {
+    /// Seconds of dropping followed by seconds of rest, repeating (Dragonfly: 3.2 on, 1.2 off).
+    /// A rest of 0 drops all the time.
+    pub drop_time: f32,
+    pub rest_time: f32,
+    /// Seconds between drops (or between bursts).
+    pub interval: f32,
+    /// Drops per burst and the seconds between them (Desert Fly: two, 0.44 s apart).
+    pub burst: u32,
+    pub burst_gap: f32,
+    /// Where each drop is aimed relative to the flyer, x to its right and y ahead, taken in turn
+    /// (Dragonfly: one bomb back to the right, the next back to the left).
+    pub aims: Vec<Vec2>,
+    /// Shots of the unit's weapon per drop (Spawn Moth: five puffs).
+    pub shots: u32,
+    /// One extra shot per drop with this weapon (Spawn Moth: a seed).
+    pub extra_weapon: Option<String>,
+}
+
+impl Default for FlyerDef {
+    fn default() -> Self {
+        Self { drop_time: 0.0, rest_time: 0.0, interval: 1.0, burst: 1, burst_gap: 0.4, aims: vec![Vec2::ZERO], shots: 1, extra_weapon: None }
+    }
+}
+
+/// A unit left behind when another dies.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DeathSpawn {
+    pub unit: String,
+    /// 0..1
+    pub chance: f32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -162,6 +258,18 @@ pub struct UnitDef {
     /// Length of the attack animation in seconds (the sim re-triggers it per shot).
     pub attack_anim_time: f32,
     pub death_time: f32,
+    /// Neutral creep plant behaviour; None for everything that is not a plant.
+    pub plant: Option<PlantDef>,
+    /// Neutral flyer bombing pattern; None drops the weapon once per reload.
+    pub flyer: Option<FlyerDef>,
+    /// Weapon set off where the unit dies (Death Lolly, Flying Machine).
+    pub death_weapon: Option<String>,
+    /// Unit left behind where it dies, on land only (seed -> Seed Ball, Flying Machine -> pilot).
+    pub death_spawn: Option<DeathSpawn>,
+    /// Audio hook looped while the unit is on the map (a flyer's buzz; OpenSA AmbientSound).
+    pub ambient_sound: String,
+    /// Audio hook looped while the unit attacks (Choc Freckle; OpenSA WithLoopedAttackSound).
+    pub attack_loop_sound: String,
     pub source: String,
 }
 
@@ -188,6 +296,12 @@ impl Default for UnitDef {
             model_scale: 1.0,
             attack_anim_time: 0.4,
             death_time: 1.2,
+            plant: None,
+            flyer: None,
+            death_weapon: None,
+            death_spawn: None,
+            ambient_sound: String::new(),
+            attack_loop_sound: String::new(),
             source: String::new(),
         }
     }
@@ -432,12 +546,37 @@ impl Default for TeamDef {
     }
 }
 
+/// Neutral creeps that come and go during a level. The original levels carry a row of "Misc"
+/// actors outside the map (MiscWhipPlant, MiscPuffball, MiscDragonfly, ...); how many of each a
+/// level has is how many of that creep can be about at once. A dead or departed creep comes back
+/// after a while: a plant regrows somewhere else, a flyer makes another pass.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct CreepPool {
+    /// Unit ids; each spawn picks one at random (the four Death Lolly colours share one pool).
+    pub units: Vec<String>,
+    /// Most alive at once.
+    pub count: u32,
+    /// Seconds between spawn attempts (random in the range).
+    pub interval: (f32, f32),
+    /// Seconds before the first attempt.
+    pub first: (f32, f32),
+}
+
+impl Default for CreepPool {
+    fn default() -> Self {
+        Self { units: Vec::new(), count: 1, interval: (15.0, 30.0), first: (15.0, 30.0) }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct MapRules {
     /// PROVISIONAL (docs/GAMEPLAY_RESEARCH.md A6): lets melee units damage colonies.
     pub melee_can_damage_colonies: bool,
     pub unit_cap: Option<u32>,
+    /// Neutral plants and flyers of the level. When this is not empty it replaces `flyers`.
+    pub creeps: Vec<CreepPool>,
     /// Neutral flyers wander across the map when true (Stage 4).
     pub flyers: bool,
     /// Pirate ant holes spawn pirates (Stage 4).
@@ -454,6 +593,7 @@ impl Default for MapRules {
         Self {
             melee_can_damage_colonies: false,
             unit_cap: None,
+            creeps: Vec::new(),
             flyers: false,
             pirates: false,
             flyer_kinds: Vec::new(),
@@ -624,6 +764,34 @@ impl Defs {
             d.colony_index.insert(id.clone(), d.colonies.len() as u16);
             d.colony_ids.push(id);
             d.colonies.push(c);
+        }
+        // creep references (units can name units defined later in the file)
+        let missing_weapon = |w: &str, what: &str| (!d.weapon_index.contains_key(w)).then(|| DataError::Missing(format!("weapon '{w}' used by {what}")));
+        let missing_unit = |u: &str, what: &str| (!d.unit_index.contains_key(u)).then(|| DataError::Missing(format!("unit '{u}' used by {what}")));
+        for (id, u) in d.unit_ids.iter().zip(&d.units) {
+            let what = format!("unit '{id}'");
+            if let Some(PlantAttack::Burst { seed_weapon: Some(w), .. }) = u.plant.as_ref().map(|p| &p.attack)
+                && let Some(e) = missing_weapon(w, &what)
+            {
+                return Err(e);
+            }
+            for w in [u.death_weapon.as_deref(), u.flyer.as_ref().and_then(|f| f.extra_weapon.as_deref())].into_iter().flatten() {
+                if let Some(e) = missing_weapon(w, &what) {
+                    return Err(e);
+                }
+            }
+            if let Some(s) = &u.death_spawn
+                && let Some(e) = missing_unit(&s.unit, &what)
+            {
+                return Err(e);
+            }
+        }
+        for (id, w) in d.weapon_ids.iter().zip(&d.weapons) {
+            if let Some(s) = &w.spawn
+                && let Some(e) = missing_unit(s, &format!("weapon '{id}'"))
+            {
+                return Err(e);
+            }
         }
         Ok(d)
     }

@@ -13,7 +13,7 @@ use std::sync::Arc;
 use bevy::audio::{AudioPlayer, AudioSink, AudioSinkPlayback, AudioSource, PlaybackSettings, Volume};
 use bevy::prelude::*;
 use bevy::state::state_scoped::DespawnOnExit;
-use sa_sim::{SimEvent, UnitId};
+use sa_sim::{Anim, SimEvent, UnitId};
 
 use crate::AppState;
 use crate::asset_root;
@@ -50,6 +50,14 @@ const ORIGINAL_SOUNDS: &[(&str, &[&str])] = &[
     ("bouncebomb_explode", &["BOUNCEBOMBEXPLODE"]),
     ("gobstopper_explode", &["GOBSTOPPEREXPLODE"]),
     ("bounce", &["BOUNCE"]),
+    ("whip_fire", &["WHIPFIRE"]),
+    ("puffball_spawn", &["PUFFBALLSPAWN"]),
+    ("freckle_fire", &["FRECKLEFIRE"]),
+    ("bomber_buzz", &["BOMBERBUZZ"]),
+    ("fly_buzz", &["FLYBUZZ"]),
+    ("moth_flutter", &["MOTHFLUTTER"]),
+    ("flying_machine", &["FLYINGMACHINE"]),
+    ("steam_puff", &["STEAMPUFF"]),
     ("colony_lost", &["POWERDOWN"]),
     ("colony_captured", &["POWERUP"]),
     ("colony_explode", &["COLONYEXPLODE"]),
@@ -161,7 +169,7 @@ fn load_library(asset_server: &AssetServer, sources: &mut Assets<AudioSource>, o
         }
     }
     info!("audio: {own} sound files in {}, {from_original} hooks use the original sounds", dir.display());
-    AudioLibrary { sounds, requested: HashSet::new(), enabled: true, master_volume: 0.8, original: is_original, budget: 0, rng: 12345 }
+    AudioLibrary { sounds, requested: HashSet::new(), enabled: true, master_volume: 0.0, original: is_original, budget: 0, rng: 12345 }
 }
 
 pub struct GameAudioPlugin;
@@ -171,7 +179,7 @@ impl Plugin for GameAudioPlugin {
         app.add_systems(Startup, setup_audio)
             .add_systems(OnEnter(AppState::Menu), start_menu_music)
             .add_systems(OnEnter(AppState::InGame), start_ambience)
-            .add_systems(Update, (play_sim_sounds, play_voices).run_if(in_state(AppState::InGame)))
+            .add_systems(Update, (play_sim_sounds, play_voices, creature_loops).run_if(in_state(AppState::InGame)))
             .add_systems(Update, update_loop_volume);
     }
 }
@@ -228,28 +236,7 @@ fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<Au
         match e {
             SimEvent::Sound { id, pos } => requests.push((id.clone(), *pos)),
             SimEvent::Impact { pos, sound, .. } if !sound.is_empty() => requests.push((sound.clone(), *pos)),
-            SimEvent::AttackStarted { unit, .. } => {
-                if let Some(u) = sim.world.unit(*unit)
-                    && let Some(wn) = &sim.world.unit_def(u).weapon
-                    && let Some(wi) = sim.world.defs.weapon(wn)
-                {
-                    let w = &sim.world.defs.weapons[wi as usize];
-                    if !w.fire_sound.is_empty() {
-                        requests.push((w.fire_sound.clone(), u.pos));
-                    }
-                }
-            }
-            SimEvent::TurretFired { colony, turret } => {
-                if let Some(c) = sim.world.colonies.get(*colony as usize)
-                    && let Some(t) = sim.world.colony_def(c).turrets.get(*turret)
-                    && let Some(wi) = sim.world.defs.weapon(&t.weapon)
-                {
-                    let w = &sim.world.defs.weapons[wi as usize];
-                    if !w.fire_sound.is_empty() {
-                        requests.push((w.fire_sound.clone(), c.pos));
-                    }
-                }
-            }
+            // (weapon sounds arrive as SimEvent::Sound when the shot is released: World::fire_weapon)
             SimEvent::UnitDied(id) => {
                 if let Some(u) = sim.world.unit(*id) {
                     let def = sim.world.unit_def(u);
@@ -308,6 +295,60 @@ fn play_sim_sounds(mut commands: Commands, sim: Res<GameSim>, mut lib: ResMut<Au
         let Some(handle) = lib.pick(&id) else { continue };
         lib.budget -= 1;
         commands.spawn((AudioPlayer::new(handle), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol))));
+    }
+}
+
+/// A looped creature sound: one player per hook, as loud as the nearest such creature is close.
+#[derive(Component)]
+struct CreatureLoop {
+    hook: String,
+}
+
+/// Looped creature sounds (OpenSA AmbientSound / WithLoopedAttackSound): a flyer's buzz while it is
+/// on the map, the Choc Freckle's spray while it attacks.
+fn creature_loops(
+    mut commands: Commands,
+    sim: Res<GameSim>,
+    mut lib: ResMut<AudioLibrary>,
+    cam: Option<Res<RtsCamera>>,
+    mut playing: Query<(Entity, &CreatureLoop, Option<&mut AudioSink>)>,
+) {
+    let focus = cam.as_ref().map(|c| Vec2::new(c.focus.x, c.focus.z)).unwrap_or(Vec2::ZERO);
+    let zoom = cam.as_ref().map(|c| c.distance).unwrap_or(26.0);
+    let mut want: HashMap<String, f32> = HashMap::new();
+    for u in sim.world.living_units() {
+        let def = sim.world.unit_def(u);
+        let hook = if !def.ambient_sound.is_empty() {
+            &def.ambient_sound
+        } else if !def.attack_loop_sound.is_empty() && u.anim == Anim::Attack {
+            &def.attack_loop_sound
+        } else {
+            continue;
+        };
+        let near = 1.0 - (u.pos.distance(focus) / (zoom * 1.6)).clamp(0.0, 1.0);
+        let v = want.entry(hook.clone()).or_insert(0.0);
+        *v = v.max(near);
+    }
+    let level = |near: f32, lib: &AudioLibrary| if lib.enabled { lib.master_volume * near * 0.6 } else { 0.0 };
+    for (e, l, sink) in &mut playing {
+        match want.remove(&l.hook) {
+            Some(near) if near > 0.02 => {
+                if let Some(mut sink) = sink {
+                    sink.set_volume(Volume::Linear(level(near, &lib)));
+                }
+            }
+            _ => commands.entity(e).despawn(),
+        }
+    }
+    for (hook, near) in want {
+        lib.requested.insert(hook.clone());
+        if near <= 0.02 {
+            continue;
+        }
+        if let Some(h) = lib.pick(&hook) {
+            let v = level(near, &lib);
+            commands.spawn((CreatureLoop { hook }, DespawnOnExit(AppState::InGame), AudioPlayer::new(h), PlaybackSettings::LOOP.with_volume(Volume::Linear(v))));
+        }
     }
 }
 

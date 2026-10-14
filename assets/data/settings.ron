@@ -8,7 +8,7 @@
     shadows: true,
     shadow_cascades: 3,
     shadow_distance: 120.0,
-    master_volume: 0.8,
+    master_volume: 0.0,
     sound_enabled: true,
     // simulation ticks per second override (0 = use rules.ron)
     tick_hz: 0.0,

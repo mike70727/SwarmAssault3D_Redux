@@ -210,7 +210,12 @@
     rules: (
         melee_can_damage_colonies: false,
         unit_cap: Some(150),
-        flyers: true,
+        // neutral creeps (original level's Misc actors): up to `count` at once, one more every `interval` seconds
+        creeps: [
+            (units: ["plant_seedball"], count: 8, interval: (8.0, 16.0), first: (8.0, 16.0)),
+            (units: ["neutral_spawn_moth"], count: 3, interval: (21.0, 33.0), first: (21.0, 33.0)),
+        ],
+        flyers: false,
         flyer_kinds: ["neutral_spawn_moth"],
         flyer_interval: 45.0,
         pirates: true,

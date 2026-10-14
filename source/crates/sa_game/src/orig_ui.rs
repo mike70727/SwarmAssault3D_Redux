@@ -190,6 +190,9 @@ pub struct OrigUi {
     pub cursors: HashMap<&'static str, Vec<Handle<Image>>>,
     pub game_over: Vec<Handle<Image>>,
     pub you_win: Vec<Handle<Image>>,
+    /// loading screens (Game\Loading0N.DDF) and the title screen (Start\SwarmAssaultLogo.DDF)
+    pub loading: Vec<Handle<Image>>,
+    pub title: Option<Handle<Image>>,
     /// any other picture, decoded on first use (name plates, portraits, breeding icons, menus)
     pics: HashMap<String, Handle<Image>>,
     fonts: HashMap<OrigFont, HashMap<char, Glyph>>,
@@ -218,6 +221,8 @@ impl OrigUi {
         }
         let game_over = (0..10).filter_map(|i| orig.picture(&format!("GAMEOVER{i:02}"))).map(|p| add(keyed(p), false)).collect();
         let you_win = (0..10).filter_map(|i| orig.picture(&format!("GAMEOVERWIN{i:02}"))).map(|p| add(keyed(p), false)).collect();
+        let loading = orig.loading.iter().map(|p| add(p.clone(), false)).collect();
+        let title = orig.title.clone().map(|p| add(p, false));
         let mut fonts = HashMap::new();
         for f in [OrigFont::List, OrigFont::ListDark, OrigFont::Large, OrigFont::LargeLight, OrigFont::Small] {
             fonts.insert(f, load_font(orig, f));
@@ -226,7 +231,7 @@ impl OrigUi {
         if let Some(s) = &orig.start {
             names.extend(s.names().map(|s| s.to_string()));
         }
-        Self { count, panel, emblems, progress, cursors, game_over, you_win, pics: HashMap::new(), fonts, names, source }
+        Self { count, panel, emblems, progress, cursors, game_over, you_win, loading, title, pics: HashMap::new(), fonts, names, source }
     }
 
     pub fn has(&self, name: &str) -> bool {
