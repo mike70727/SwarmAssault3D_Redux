@@ -12,6 +12,7 @@ pub mod ai;
 pub mod data;
 pub mod events;
 pub mod grid;
+pub mod procgen;
 pub mod save;
 pub mod spatial;
 pub mod world;

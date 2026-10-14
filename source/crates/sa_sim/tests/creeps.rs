@@ -17,7 +17,7 @@ fn meadow() -> World {
         name: "meadow".into(),
         width: 40,
         height: 40,
-        teams: vec![TeamDef { id: 1, name: "Ants".into(), color: "Y".into(), controller: Controller::Human, bot_profile: String::new() }],
+        teams: vec![TeamDef { id: 1, name: "Ants".into(), color: "Y".into(), controller: Controller::Human, bot_profile: String::new(), breed_speed: 1.0 }],
         ..Default::default()
     };
     World::new(defs, map).expect("world")

@@ -13,7 +13,7 @@ fn assets() -> PathBuf {
 /// An empty 40x40 meadow with two teams, optionally a red colony in the middle.
 fn meadow(colony: bool) -> World {
     let defs = Defs::load_dir(&assets().join("data")).expect("data files");
-    let team = |id: u8, name: &str, color: &str| TeamDef { id, name: name.into(), color: color.into(), controller: Controller::Human, bot_profile: String::new() };
+    let team = |id: u8, name: &str, color: &str| TeamDef { id, name: name.into(), color: color.into(), controller: Controller::Human, bot_profile: String::new(), breed_speed: 1.0 };
     let map = MapDef {
         name: "meadow".into(),
         width: 40,

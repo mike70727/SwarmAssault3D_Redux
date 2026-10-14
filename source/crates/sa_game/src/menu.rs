@@ -34,6 +34,8 @@ pub enum MenuAction {
     Options,
     /// Open the settings dialog.
     Settings,
+    /// Play the current level of the procedural run (unlocked by finishing the campaign).
+    StartProcedural,
 }
 
 /// End-of-level overlay (level complete / defeated).
@@ -51,7 +53,7 @@ pub struct EndState {
 struct MenuExtra<'w, 's> {
     page: ResMut<'w, MenuPage>,
     roots: Query<'w, 's, Entity, With<MenuRoot>>,
-    progress: Res<'w, Progress>,
+    progress: ResMut<'w, Progress>,
     settings: Res<'w, Settings>,
     end: ResMut<'w, EndState>,
     end_overlays: Query<'w, 's, Entity, With<EndOverlay>>,
@@ -188,6 +190,10 @@ fn build_menu(commands: &mut Commands, page: usize, progress: &Progress, unlock_
                     nav.spawn((Text::new(format!("page {} / {}", page + 1, pages)), ui.text(15.0), TextColor(TEXT), shadow(), Node { width: px(120), ..default() }, TextLayout { justify: bevy::text::Justify::Center, ..default() }));
                     dialog_button(nav, ui, "Next page >", 200.0, MenuAction::Page(1));
                 });
+                if progress.procedural_unlocked(unlock_all) {
+                    let level = if progress.procedural_seed == 0 { 1 } else { progress.procedural_level.max(1) };
+                    dialog_button(panel, ui, &format!("Procedural Mode  -  level {level}"), 664.0, MenuAction::StartProcedural);
+                }
                 panel.spawn(Node { flex_direction: FlexDirection::Row, column_gap: px(8), ..default() }).with_children(|row| {
                     dialog_button(row, ui, "Load quicksave", 216.0, MenuAction::LoadQuicksave);
                     dialog_button(row, ui, "Settings", 216.0, MenuAction::Settings);
@@ -231,6 +237,11 @@ fn on_activate(
                 commands.entity(r).despawn();
             }
             build_menu(&mut commands, extra.page.0, &extra.progress, extra.settings.unlock_all_levels, &extra.ui);
+        }
+        MenuAction::StartProcedural => {
+            cli.map = extra.progress.procedural_map();
+            cli.load = None;
+            next.set(AppState::Loading);
         }
         MenuAction::NextLevel => {
             if let Some(file) = next_level_file(sim.as_deref()) {
@@ -391,9 +402,13 @@ fn auto_start(mut commands: Commands, cli: Res<CliOptions>, time: Res<Time>, but
     }
 }
 
-/// File of the campaign level after the one being played (None when there is none).
+/// File of the campaign level after the one being played, or the next procedural level (None
+/// when there is none).
 fn next_level_file(sim: Option<&GameSim>) -> Option<String> {
     let sim = sim?;
+    if sim.world.map.category == "procedural" {
+        return Some(crate::progress::procedural_map_name(sim.world.map.number? + 1, sim.world.map.run_seed?));
+    }
     if sim.world.map.category != "campaign" {
         return None;
     }
@@ -424,9 +439,13 @@ fn game_end_screen(
         end.shown = true;
         end.timer = 0.0;
         let campaign = sim.world.map.category == "campaign";
+        let procedural = sim.world.map.category == "procedural";
         let number = sim.world.map.number;
         if won && campaign && let Some(n) = number {
             progress.complete(n);
+        }
+        if won && procedural && let (Some(n), Some(seed)) = (number, sim.world.map.run_seed) {
+            progress.procedural_won(n, seed);
         }
         progress.last_level = Some(cli.map.clone());
         progress.save();
@@ -434,9 +453,10 @@ fn game_end_screen(
             return;
         }
         let has_next = won && next_level_file(Some(&sim)).is_some();
-        let title = if won { if campaign { "LEVEL COMPLETE" } else { "VICTORY" } } else { "DEFEATED" };
+        let title = if won { if campaign || procedural { "LEVEL COMPLETE" } else { "VICTORY" } } else { "DEFEATED" };
         let sub = match (won, campaign, number) {
-            (true, true, Some(n)) if n >= 100 => "You have completed the campaign!".to_string(),
+            (true, true, Some(n)) if n >= 100 => "You have completed the campaign! Procedural Mode is open on the main menu.".to_string(),
+            (true, false, Some(n)) if procedural => format!("Procedural level {n} won. The next one is harder."),
             (true, true, Some(n)) => format!("Level {n} won: every colony is yours and the enemy is gone."),
             (true, _, _) => "Every colony is yours and the enemy is gone.".to_string(),
             _ => "You have no colonies and no units left.".to_string(),

@@ -58,6 +58,16 @@ The original's 100 campaign levels and its 24 custom and skirmish maps, with the
 (grass, desert, swamp and candy), colonies, turrets, boosters, creatures and start positions,
 plus two demo maps. Campaign levels unlock one after another.
 
+### Procedural Mode
+
+Finish the campaign and a **Procedural Mode** button appears on the main menu: an endless run of
+new maps. Every map is made from scratch with a name to match. Its ground is laid with the
+original's own ground pieces, in the patterns the original levels use, so the shores, rocks and
+scrub look like a real Swarm Assault level. Colonies, armies, plants, flyers and props are placed
+on top. Win and **Next Level** takes you on to a harder map: more enemy teams (up to three), more
+enemy colonies, turrets and starting units, smarter bots, then ever faster enemy breeding. It
+never ends. Lose and you can retry the same map; the game remembers how far you got.
+
 ### The original's look and sound, from your own copy
 
 Point the game at your copy of the original and it uses the original's ground tiles, the
@@ -137,7 +147,7 @@ More in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 
 | Path | Contents |
 |---|---|
-| `source/crates/sa_sim` | the game rules: a deterministic simulation with no graphics (units, weapons, projectiles, colonies and capture, creeps, bots, victory, save and load) and its tests |
+| `source/crates/sa_sim` | the game rules: a deterministic simulation with no graphics (units, weapons, projectiles, colonies and capture, creeps, bots, victory, save and load, the procedural level generator) and its tests |
 | `source/crates/sa_game` | the Bevy game: camera, selection and orders, models and animation, ground, interface, menus, sound, the reader for the original's files |
 | `source/blender` | Blender Python scripts that build every model, the `.blend` sources and preview renders |
 | `source/tools` | level converter, sound and interface generators, packaging scripts |

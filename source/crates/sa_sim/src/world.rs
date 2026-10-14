@@ -374,7 +374,7 @@ impl World {
         let mut teams: Vec<TeamState> = Vec::new();
         // team 0 is always the neutral "creeps" team
         teams.push(TeamState {
-            def: TeamDef { id: 0, name: "Neutral".into(), color: "X".into(), controller: Controller::None, bot_profile: String::new() },
+            def: TeamDef { id: 0, name: "Neutral".into(), color: "X".into(), controller: Controller::None, bot_profile: String::new(), breed_speed: 1.0 },
             defeated: false,
             bot: None,
             units_alive: 0,
@@ -391,7 +391,7 @@ impl World {
             }
             while teams.len() < td.id as usize {
                 teams.push(TeamState {
-                    def: TeamDef { id: teams.len() as u8, name: format!("Team {}", teams.len()), color: "X".into(), controller: Controller::None, bot_profile: String::new() },
+                    def: TeamDef { id: teams.len() as u8, name: format!("Team {}", teams.len()), color: "X".into(), controller: Controller::None, bot_profile: String::new(), breed_speed: 1.0 },
                     defeated: true,
                     bot: None,
                     units_alive: 0,
@@ -2616,7 +2616,8 @@ impl World {
             Some((t, f)) if t == team && f > 0.0 => f,
             _ => 1.0,
         };
-        (1.0 - 0.1 * self.boosts(team, crate::data::BoostKind::Production) as f32).max(0.05) / cheat
+        let speed = self.teams.get(team as usize).map(|t| t.def.breed_speed).filter(|s| *s > 0.0).unwrap_or(1.0);
+        (1.0 - 0.1 * self.boosts(team, crate::data::BoostKind::Production) as f32).max(0.05) / cheat / speed
     }
 }
 

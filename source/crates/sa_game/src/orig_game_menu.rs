@@ -123,7 +123,7 @@ fn show_game_menu(
                         commands.entity(e).despawn();
                     }
                     flow.end_menu = true;
-                    let next = won && sim.world.map.category == "campaign" && sim.world.map.number.is_some_and(|n| n < 100);
+                    let next = won && (sim.world.map.category == "campaign" && sim.world.map.number.is_some_and(|n| n < 100) || sim.world.map.category == "procedural");
                     let kind = if won { Kind::Won { next } } else { Kind::Lost };
                     build_menu(&mut commands, &mut ui, &mut images, &sim, kind, settings.master_volume, EndOverlay);
                 }

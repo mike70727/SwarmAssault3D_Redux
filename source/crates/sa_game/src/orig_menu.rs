@@ -125,14 +125,16 @@ pub(crate) fn picture_button<B: Bundle>(c: &mut ChildSpawnerCommands, ui: &mut O
     c.spawn((Button, ActivateOnPress, Hovered::default(), ButtonArt { normal: n.clone(), hover: h }, ImageNode::new(n), abs(), r, action));
 }
 
-/// A blank stone button with a caption in the original font.
+/// A blank stone button with a caption in the original font, laid on the canvas over the button.
 fn caption_button<B: Bundle>(c: &mut ChildSpawnerCommands, ui: &mut OrigUi, images: &mut Assets<Image>, caption: &str, r: CanvasRect, action: B) {
-    let (Some(n), Some(h)) = (ui.pic_keyed(images, "MAINMENUBLANKN00"), ui.pic_keyed(images, "MAINMENUBLANKP00")) else { return };
+    // (the original names these two without the 00 its other buttons carry)
+    let (Some(n), Some(h)) = (ui.pic_keyed(images, "MAINMENUBLANKN"), ui.pic_keyed(images, "MAINMENUBLANKP")) else { return };
     let (text, size) = ui.text(images, OrigFont::Large, caption);
     let rr = r.0;
-    c.spawn((Button, ActivateOnPress, Hovered::default(), ButtonArt { normal: n.clone(), hover: h }, ImageNode::new(n), abs(), r, action)).with_children(|b| {
-        b.spawn((ImageNode::new(text), abs(), rect((rr.width() - size.x) * 0.5, (rr.height() - size.y) * 0.5, size.x, size.y), Pickable::IGNORE));
-    });
+    c.spawn((Button, ActivateOnPress, Hovered::default(), ButtonArt { normal: n.clone(), hover: h }, ImageNode::new(n), abs(), r, action));
+    // the large font is orange; the original's own buttons are lettered dark maroon (~98, 35, 34)
+    let maroon = ImageNode { color: Color::srgb(0.53, 0.43, 1.0), ..ImageNode::new(text) };
+    c.spawn((maroon, abs(), rect(rr.min.x + (rr.width() - size.x) * 0.5, rr.min.y + (rr.height() - size.y) * 0.5, size.x, size.y), Pickable::IGNORE));
 }
 
 fn enter_menu(mut menu: ResMut<OrigMenu>) {
@@ -184,6 +186,9 @@ fn rebuild_when_needed(
         }
         Screen::Main => {
             let bg = ui.pic(images, "MAINMENUBACKGROUND");
+            // finishing the campaign opens Procedural Mode: a button of its own on the open stone under
+            // the logo (the six slots of the column are engraved in the background)
+            let procedural = progress.procedural_unlocked(settings.unlock_all_levels);
             spawn_canvas(&mut commands, AppState::Menu, bg, |c| {
                 let slot = |i: usize| rect(224.0, 64.0 + 56.0 * i as f32, 192.0, 32.0);
                 picture_button(c, ui, images, "MAINMENULOADGAMEN00", "MAINMENULOADGAMEP00", slot(0), OrigAction::PlayGame);
@@ -192,6 +197,9 @@ fn rebuild_when_needed(
                 caption_button(c, ui, images, "Settings", slot(3), MenuAction::Settings);
                 picture_button(c, ui, images, "MAINMENUCREDITSN00", "MAINMENUCREDITSP00", slot(4), OrigAction::Credits);
                 picture_button(c, ui, images, "MAINMENUEXITN00", "MAINMENUEXITP00", slot(5), MenuAction::Quit);
+                if procedural {
+                    caption_button(c, ui, images, "Procedural Mode", rect(20.0, 204.0, 192.0, 32.0), MenuAction::StartProcedural);
+                }
             });
         }
         Screen::List(custom) => {
@@ -336,6 +344,7 @@ fn loading_screen(mut commands: Commands, mut ui: ResMut<OrigUi>, mut images: Re
     let pick = if ui.loading.is_empty() { None } else { Some(ui.loading[(time.elapsed_secs() * 1000.0) as usize % ui.loading.len()].clone()) };
     let caption = sim.map(|s| match s.world.map.number {
         Some(n) if s.world.map.category == "campaign" => format!("Loading . {n:03}) {}", s.world.map.name),
+        Some(n) if s.world.map.category == "procedural" => format!("Loading . Procedural Level {n}) {}", s.world.map.name),
         _ => format!("Loading . {}", s.world.map.name),
     });
     let text = caption.map(|c| ui.text(&mut images, OrigFont::List, &c));

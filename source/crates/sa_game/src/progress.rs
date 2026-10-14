@@ -17,6 +17,24 @@ pub struct Progress {
     pub unlocked_all: bool,
     /// File name of the last level played.
     pub last_level: Option<String>,
+    /// Procedural mode (unlocked by finishing the campaign): the seed of the current run (0 = none
+    /// started), the level to play next and the best level won.
+    pub procedural_seed: u64,
+    pub procedural_level: u32,
+    pub procedural_best: u32,
+}
+
+/// Map name of a procedural level: "procedural:<level>:<run seed>" (sim_plugin.rs generates it).
+pub fn procedural_map_name(level: u32, seed: u64) -> String {
+    format!("procedural:{level}:{seed}")
+}
+
+/// Level and run seed of a procedural map name.
+pub fn parse_procedural(name: &str) -> Option<(u32, u64)> {
+    let mut parts = name.strip_prefix("procedural:")?.split(':');
+    let level = parts.next()?.parse().ok()?;
+    let seed = parts.next()?.parse().ok()?;
+    Some((level, seed))
 }
 
 impl Progress {
@@ -51,6 +69,34 @@ impl Progress {
         match number {
             Some(n) => settings_unlock_all || self.unlocked_all || n <= self.completed + 1,
             None => true,
+        }
+    }
+
+    /// Procedural mode opens once the whole campaign is won (or with "unlock everything").
+    pub fn procedural_unlocked(&self, settings_unlock_all: bool) -> bool {
+        settings_unlock_all || self.unlocked_all || self.completed >= 100
+    }
+
+    /// The procedural level to play now; the first visit starts a run with a new seed.
+    pub fn procedural_map(&mut self) -> String {
+        if self.procedural_seed == 0 {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+            self.procedural_seed = now | 1;
+            self.procedural_level = 1;
+            self.save();
+        }
+        procedural_map_name(self.procedural_level.max(1), self.procedural_seed)
+    }
+
+    /// Record a won procedural level of the run `seed`: the next one is up.
+    pub fn procedural_won(&mut self, level: u32, seed: u64) {
+        if self.procedural_seed == 0 {
+            self.procedural_seed = seed;
+        }
+        if seed == self.procedural_seed {
+            self.procedural_level = self.procedural_level.max(level + 1);
+            self.procedural_best = self.procedural_best.max(level);
+            self.save();
         }
     }
 

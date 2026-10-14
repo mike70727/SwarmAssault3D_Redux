@@ -557,11 +557,13 @@ pub struct TeamDef {
     pub color: String,
     pub controller: Controller,
     pub bot_profile: String,
+    /// Breeding speed of the team's colonies (1 = normal; procedural levels speed the enemies up).
+    pub breed_speed: f32,
 }
 
 impl Default for TeamDef {
     fn default() -> Self {
-        Self { id: 1, name: "Yellow".into(), color: "Y".into(), controller: Controller::Human, bot_profile: "medium".into() }
+        Self { id: 1, name: "Yellow".into(), color: "Y".into(), controller: Controller::Human, bot_profile: "medium".into(), breed_speed: 1.0 }
     }
 }
 
@@ -655,6 +657,9 @@ pub struct MapDef {
     /// digit). Written by tools/add_ground_tiles.py; the pictures come from the player's own copy of
     /// the original game at run time.
     pub tiles: Option<String>,
+    /// Procedural levels (category "procedural"): the seed of the run they belong to; the next
+    /// level is made from it.
+    pub run_seed: Option<u64>,
 }
 
 impl Default for MapDef {
@@ -678,6 +683,7 @@ impl Default for MapDef {
             number: None,
             author: String::new(),
             tiles: None,
+            run_seed: None,
         }
     }
 }

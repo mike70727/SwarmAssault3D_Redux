@@ -48,7 +48,7 @@ impl Plugin for SimPlugin {
     }
 }
 
-pub fn load_sim(mut commands: Commands, cli: Res<CliOptions>) {
+pub fn load_sim(mut commands: Commands, cli: Res<CliOptions>, mut ground: Local<Option<sa_sim::procgen::GroundModel>>) {
     let assets_dir = PathBuf::from(asset_root());
     let world = if let Some(save) = &cli.load {
         match sa_sim::save::load(&PathBuf::from(save)) {
@@ -66,14 +66,34 @@ pub fn load_sim(mut commands: Commands, cli: Res<CliOptions>) {
                 std::process::exit(2);
             }
         };
-        // a map name from the level list, or any path to a map file (test and showcase maps)
-        let direct = PathBuf::from(&cli.map);
-        let map_path = if direct.is_absolute() || direct.components().count() > 1 { direct } else { assets_dir.join("data/maps").join(&cli.map) };
-        let mut map = match MapDef::load(&map_path) {
-            Ok(m) => m,
-            Err(e) => {
-                error!("could not load map {}: {e}", cli.map);
-                std::process::exit(2);
+        let mut map = if let Some((level, seed)) = crate::progress::parse_procedural(&cli.map) {
+            // procedural mode: a new level from the run's seed, its ground learned from the levels
+            if ground.is_none() {
+                match sa_sim::procgen::GroundModel::from_dir(&assets_dir.join("data/maps")) {
+                    Ok(m) => *ground = Some(m),
+                    Err(e) => {
+                        error!("could not read the levels for procedural mode: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+            match sa_sim::procgen::generate(ground.as_ref().unwrap(), &defs, level, seed) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("could not make procedural level {level}: {e}");
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            // a map name from the level list, or any path to a map file (test and showcase maps)
+            let direct = PathBuf::from(&cli.map);
+            let map_path = if direct.is_absolute() || direct.components().count() > 1 { direct } else { assets_dir.join("data/maps").join(&cli.map) };
+            match MapDef::load(&map_path) {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("could not load map {}: {e}", cli.map);
+                    std::process::exit(2);
+                }
             }
         };
         if let Some(n) = cli.bench_units {
