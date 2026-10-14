@@ -118,15 +118,16 @@ fn load_assets(
     let mut team_colony_materials = HashMap::new();
     let mut team_colors = HashMap::new();
     let mut team_colony_colors = HashMap::new();
-    for t in &sim.world.teams {
+    // team 0 (neutral, colour "X") keeps the defaults below: near-black creatures, but colonies in
+    // the original's pale beige (tinting them like the units made neutral colonies near-black)
+    for t in sim.world.teams.iter().filter(|t| t.def.id != 0) {
         let [r, g, b] = sa_sim::team_rgb(&t.def.color);
         team_materials.insert(t.def.id, materials.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 0.5, ..default() }));
         team_colors.insert(t.def.id, Color::srgb(r, g, b));
-        // colony bodies: a slightly lighter tint of the team colour, still as saturated as the
-        // original sprites (the old c * 0.6 + 0.45 turned yellow into cream)
-        let lift = |c: f32| (c * 0.9 + 0.1).min(1.0);
-        team_colony_materials.insert(t.def.id, materials.add(StandardMaterial { base_color: Color::srgb(lift(r), lift(g), lift(b)), perceptual_roughness: 0.55, ..default() }));
-        team_colony_colors.insert(t.def.id, Color::srgb(lift(r), lift(g), lift(b)));
+        // colony bodies take the team colour as it is: their textures bake their own shading on
+        // near-white (a lighter tint washed the campaign gold out to cream)
+        team_colony_materials.insert(t.def.id, materials.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 0.55, ..default() }));
+        team_colony_colors.insert(t.def.id, Color::srgb(r, g, b));
     }
     // neutral (team 0): near-black units, grey colony bodies
     team_colors.entry(0).or_insert(Color::srgb(0.16, 0.16, 0.16));

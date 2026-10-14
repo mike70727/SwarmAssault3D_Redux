@@ -87,11 +87,14 @@ fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Setting
         Tonemapping::AcesFitted,
     ));
     commands.insert_resource(cam);
+    // the sun from the west-south-west, high: the faces the camera sees stay lit, but every model
+    // gets a shaded side and casts its shadow to the right, like the original's renders lit from
+    // the front left (from behind the camera everything looked flat; from the north-west, backlit)
     commands.spawn((
         DespawnOnExit(AppState::InGame),
         DirectionalLight { illuminance: 5500.0, shadow_maps_enabled: settings.shadows, ..default() },
         CascadeShadowConfigBuilder { num_cascades: settings.shadow_cascades.clamp(1, 4), first_cascade_far_bound: 20.0, maximum_distance: settings.shadow_distance.max(20.0), ..default() }.build(),
-        Transform::from_rotation(Quat::from_euler(EulerRot::YXZ, -0.6, -1.0, 0.0)),
+        Transform::from_rotation(Quat::from_euler(EulerRot::YXZ, -1.1, -0.95, 0.0)),
     ));
     commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.8, 0.85, 1.0), brightness: 220.0, ..default() });
 }

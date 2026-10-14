@@ -180,7 +180,7 @@ fn knob_rect(volume: f32) -> crate::orig_menu::CanvasRect {
 
 /// Which of the menu's four colour rows (green, blue, red, yellow) a team's colour belongs to.
 fn colour_row(color: &str) -> usize {
-    let refs = [[0.22, 0.47, 0.09], [0.22, 0.35, 0.72], [0.53, 0.16, 0.16], [0.72, 0.66, 0.28]];
+    let refs = [sa_sim::team_rgb("G"), sa_sim::team_rgb("B"), sa_sim::team_rgb("R"), sa_sim::team_rgb("Y")];
     let c = sa_sim::team_rgb(color);
     let d = |r: &[f32; 3]| (0..3).map(|i| (r[i] - c[i]).powi(2)).sum::<f32>();
     (0..4).min_by(|a, b| d(&refs[*a]).total_cmp(&d(&refs[*b]))).unwrap_or(0)

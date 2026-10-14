@@ -338,11 +338,13 @@ pub struct TurretDef {
     pub node: String,
     /// Height of the barrel above ground (render hook for projectiles).
     pub height: f32,
+    /// Distance from the yaw axis to the barrel tip, where shots leave (cells).
+    pub muzzle: f32,
 }
 
 impl Default for TurretDef {
     fn default() -> Self {
-        Self { offset: Vec2::ZERO, weapon: String::new(), turn_rate: 720.0, node: "Turret_1".into(), height: 0.8 }
+        Self { offset: Vec2::ZERO, weapon: String::new(), turn_rate: 720.0, node: "Turret_1".into(), height: 0.8, muzzle: 0.4 }
     }
 }
 

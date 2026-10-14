@@ -585,7 +585,16 @@ impl World {
         let d = self.defs.colonies[def as usize].clone();
         self.grid.block_square(pos, d.half_extent, d.corner_cut);
         let id = self.colonies.len() as u32;
-        let turrets = d.turrets.iter().map(|_| TurretState { yaw: 0.0, target: None, reload: 0.0, fire_seq: 0 }).collect();
+        // idle turrets look outward from their colony (a centred one towards the middle of the map)
+        let centre = self.grid.size() * 0.5;
+        let turrets = d
+            .turrets
+            .iter()
+            .map(|t| {
+                let out = if t.offset.length() > 0.1 { t.offset } else { centre - pos };
+                TurretState { yaw: if out.length() > 0.01 { dir_to_heading(out) } else { 0.0 }, target: None, reload: 0.0, fire_seq: 0 }
+            })
+            .collect();
         self.colonies.push(Colony {
             id,
             def,
@@ -1700,7 +1709,7 @@ impl World {
                                 turret.reload = w.reload;
                                 turret.fire_seq = turret.fire_seq.wrapping_add(1);
                                 self.events.push(SimEvent::TurretFired { colony: ci as u32, turret: ti });
-                                let muzzle = tpos + heading_to_dir(turret.yaw) * 0.4;
+                                let muzzle = tpos + heading_to_dir(turret.yaw) * tdef.muzzle;
                                 self.fire_weapon(widx, team, None, muzzle, tdef.height, Target::Unit(tid), &mut hits, &mut spawned);
                             }
                         }
@@ -2588,11 +2597,13 @@ pub fn team_rgb(color: &str) -> [f32; 3] {
     if hex.len() == 6 && let Ok(v) = u32::from_str_radix(hex, 16) {
         return [((v >> 16) & 0xff) as f32 / 255.0, ((v >> 8) & 0xff) as f32 / 255.0, (v & 0xff) as f32 / 255.0];
     }
+    // the original's letters stand for the same colours the converted levels spell out
+    // (#F5D378, #CA3131, #57AC49, #606EA5)
     match color {
-        "Y" => [0.72, 0.66, 0.28],
-        "R" => [0.53, 0.16, 0.16],
-        "G" => [0.22, 0.47, 0.09],
-        "B" => [0.22, 0.35, 0.72],
+        "Y" => [0.961, 0.827, 0.471],
+        "R" => [0.792, 0.192, 0.192],
+        "G" => [0.341, 0.675, 0.286],
+        "B" => [0.376, 0.431, 0.647],
         _ => [0.16, 0.16, 0.16],
     }
 }
