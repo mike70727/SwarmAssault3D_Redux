@@ -3,10 +3,10 @@
 A faithful 3-D recreation of *Swarm Assault* (Gate 5 Creations, 1999), the real-time strategy
 game of warring bug colonies, rebuilt from scratch in Rust with [Bevy](https://bevy.org).
 
-![Level 56, Bomber Paradise: a fallen scorpion colony, scorpions fighting and Dragonflies bombing](docs/screenshots/redux/battle.jpg)
+![Level 56, Bomber Paradise: scorpions fight between their colonies while a Dragonfly bombs](docs/screenshots/redux/battle.jpg)
 
-*Level 56, Bomber Paradise: a scorpion colony has just fallen and its bits lie scattered for the
-taking, while Dragonflies make their bombing runs.*
+*Level 56, Bomber Paradise: scorpions clash between their two colonies while a Dragonfly makes its
+bombing run.*
 
 Five bug families fight over colonies across the original's levels. The rules, levels and
 interface are the original's; the battlefield is 3-D. Every bug, colony, turret, plant and prop is
@@ -91,8 +91,8 @@ taken with a copy installed.
 
 | | |
 |---|---|
-| ![A beetle colony and its turret, close up](docs/screenshots/redux/colony.jpg)<br>A beetle colony and its turret | ![Savage Scorpions against a pack of Black Widows beside a wasp colony](docs/screenshots/redux/candy.jpg)<br>A candy level: scorpions against Black Widows |
-| ![Lady Bugs fight a Black Widow between spider and beetle colonies](docs/screenshots/redux/everywhere.jpg)<br>Lady Bugs against a Black Widow | ![Popcorn Plant, Thorn Bush and Seed Ball above; Choc Freckle and Death Lollies below](docs/screenshots/redux/plants.jpg)<br>Creep plants: two Death Lollies have just gone off |
+| ![A beetle colony and its cannon, close up](docs/screenshots/redux/colony.jpg)<br>A beetle colony and its cannon | ![A wasp colony on a candy level, a Black Widow and an Assault Wasp](docs/screenshots/redux/candy.jpg)<br>A candy level: a wasp colony, a Black Widow and an Assault Wasp |
+| ![Lady Bugs fight Black Widows between spider and beetle colonies](docs/screenshots/redux/everywhere.jpg)<br>Lady Bugs against Black Widows | ![Popcorn Plant, Thorn Bush and Seed Ball above; Choc Freckle and Death Lollies below](docs/screenshots/redux/plants.jpg)<br>Creep plants: two Death Lollies have just gone off |
 
 ## Playing
 
