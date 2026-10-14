@@ -9,11 +9,15 @@ game of warring bug colonies, rebuilt from scratch in Rust with [Bevy](https://b
 bombing run.*
 
 Five bug families fight over colonies across the original's levels. The rules, levels and
-interface are the original's; the battlefield is 3-D. Every bug, colony, turret, plant and prop is
-a new 3-D model, rigged and animated in Blender by scripts kept in this repository, and each
-level's ground is built in 3-D from the original level layout. The code is all new: nothing from
-the 1999 game is copied into this repository. If you own the original, the game reads its
+interface are the original's; the battlefield is 3-D. Every bug, turret, plant and prop is a new
+3-D model, rigged and animated in Blender by scripts kept in this repository; the colonies were
+generated with Tripo from the original's colony pictures and finished in Blender the same way.
+Each level's ground is built in 3-D from the original level layout. The code is all new: nothing
+from the 1999 game is copied into this repository. If you own the original, the game reads its
 interface, menus, ground tiles, effects and sounds from your copy while it runs.
+
+On top of the original, Redux adds a twist of its own: beat the campaign and an endless
+**Procedural Mode** opens up, with new generated levels that keep getting harder.
 
 **Status:** work in progress, playable on Windows. Every level loads and runs (checked by the
 test suite). Being worked on now: each bug's attack animation, matched to the original's attack
@@ -36,10 +40,18 @@ target and loop back round until they hit.
 
 ### Colonies
 
+![The five colonies in their team colours: ant, beetle (neutral), spider, scorpion, wasp](docs/screenshots/redux/colonies.jpg)
+
 Each family's colony breeds its three units and defends itself with turrets. Destroy an enemy
 colony and it scatters bits: collect more of them than anyone else and the colony is yours, as
 in the original. Turret structures (tesla coils among them) and boosters stand where the
 original levels put them.
+
+The colony models began as 3-D models that Tripo generated from the original's colony pictures.
+In Blender each one was stood level, fitted to the original's camera view and textured in its
+team colour. The turrets sit where the original mounts them: the ant's twin machine guns, the
+beetle's cannon, the spider's sniper barrels in its two towers, the scorpion's spear launcher and
+the wasp's chain gun. New bugs walk out of the colony's doorway.
 
 ### Neutral creatures
 
@@ -58,10 +70,10 @@ The original's 100 campaign levels and its 24 custom and skirmish maps, with the
 (grass, desert, swamp and candy), colonies, turrets, boosters, creatures and start positions,
 plus two demo maps. Campaign levels unlock one after another.
 
-### Procedural Mode
+### Procedural Mode: our own twist
 
-Finish the campaign and a **Procedural Mode** button appears on the main menu: an endless run of
-new maps. Every map is made from scratch with a name to match. Its ground is laid with the
+This is not in the 1999 game; it is Redux's own addition. Finish the campaign and a
+**Procedural Mode** button appears on the main menu: an endless run of new maps. Every map is made from scratch with a name to match. Its ground is laid with the
 original's own ground pieces, in the patterns the original levels use, so the shores, rocks and
 scrub look like a real Swarm Assault level. Colonies, armies, plants, flyers and props are placed
 on top. Win and **Next Level** takes you on to a harder map: more enemy teams (up to three), more
@@ -91,8 +103,8 @@ taken with a copy installed.
 
 | | |
 |---|---|
-| ![A beetle colony and its cannon, close up](docs/screenshots/redux/colony.jpg)<br>A beetle colony and its cannon | ![A wasp colony on a candy level, a Black Widow and an Assault Wasp](docs/screenshots/redux/candy.jpg)<br>A candy level: a wasp colony, a Black Widow and an Assault Wasp |
-| ![Lady Bugs fight Black Widows between spider and beetle colonies](docs/screenshots/redux/everywhere.jpg)<br>Lady Bugs against Black Widows | ![Popcorn Plant, Thorn Bush and Seed Ball above; Choc Freckle and Death Lollies below](docs/screenshots/redux/plants.jpg)<br>Creep plants: two Death Lollies have just gone off |
+| ![A beetle colony and its cannon; new Lady Bugs leave through its doorway](docs/screenshots/redux/colony.jpg)<br>A beetle colony and its cannon; new Lady Bugs leave through the doorway | ![A wasp colony on a candy level and its Assault Wasps](docs/screenshots/redux/candy.jpg)<br>A candy level: a wasp colony and its Assault Wasps |
+| ![Black Widows march out of a spider colony; a beetle colony below](docs/screenshots/redux/everywhere.jpg)<br>Black Widows march out of a spider colony | ![Popcorn Plant, Thorn Bush and Seed Ball above; Choc Freckle and Death Lollies below](docs/screenshots/redux/plants.jpg)<br>Creep plants: two Death Lollies have just gone off |
 
 ## Playing
 
@@ -157,17 +169,20 @@ More in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 
 ## Faithfulness
 
-Unit and colony numbers come from OpenSA, a fan re-implementation of *Swarm Assault* on the
-OpenRA engine; where the original's own data files could settle a question (creature counts per
-level, animations, the interface layout), they did. [docs/GAMEPLAY_RESEARCH.md](docs/GAMEPLAY_RESEARCH.md)
-lists what is verified and what is assumed.
+Health, damage and range of every bug, neutral creature and colony turret are the original
+program's own numbers, read from its code. Other unit and colony numbers come from OpenSA, a fan
+re-implementation of *Swarm Assault* on the OpenRA engine. Where the original's own data files
+could settle a question (creature counts per level, animations, turret mounts, the interface
+layout), they did. [docs/GAMEPLAY_RESEARCH.md](docs/GAMEPLAY_RESEARCH.md) lists what is verified
+and what is assumed. Procedural Mode is the one deliberate addition.
 
 ## Credits and license
 
 * *Swarm Assault* was made by Gate 5 Creations in 1999 and published by Mountain King Studios.
   This is an unofficial fan recreation, not affiliated with or endorsed by them.
 * The levels were converted from the OpenSA project's maps ([docs/LEVELS.md](docs/LEVELS.md)).
-* Built with [Bevy](https://bevy.org) and [Blender](https://www.blender.org).
+* Built with [Bevy](https://bevy.org) and [Blender](https://www.blender.org); the colony models
+  were generated with [Tripo](https://www.tripo3d.ai) by mike70727.
 * Made by [mike70727](https://github.com/mike70727), with Claude (Anthropic) writing the code,
   models and animation.
 
