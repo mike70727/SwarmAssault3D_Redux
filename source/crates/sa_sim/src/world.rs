@@ -842,11 +842,20 @@ impl World {
         best.map(|(_, t)| t)
     }
 
-    /// Point to test line of sight against: a plant fills its own (blocked) cell, so a shooter only
-    /// needs to see the near edge of that cell.
+    /// Point to test line of sight against: a plant fills its own (blocked) cell and a colony its
+    /// footprint, so a shooter only needs to see the near edge of them (aiming at a colony's centre,
+    /// the colony's own cells blocked every shot from more than 2 cells away).
     fn sight_point(&self, from: Vec2, t: Target, tp: Vec2) -> Vec2 {
         match t {
             Target::Unit(id) if self.unit(id).is_some_and(|u| self.defs.units[u.kind as usize].plant.as_ref().is_some_and(|p| p.blocks)) => tp - (tp - from).normalize_or_zero() * 0.75,
+            Target::Colony(c) => match self.colonies.get(c as usize) {
+                Some(col) => {
+                    let h = Vec2::splat(self.defs.colonies[col.def as usize].half_extent);
+                    let edge = from.clamp(col.pos - h, col.pos + h);
+                    edge + (from - edge).normalize_or_zero() * 0.3
+                }
+                None => tp,
+            },
             _ => tp,
         }
     }
@@ -1040,7 +1049,10 @@ impl World {
                         u.anim = Anim::Attack;
                         if !u.shot_released && t >= w.fire_delay {
                             u.shot_released = true;
-                            u.reload = w.reload;
+                            // the reload counts from the start of the attack (OpenRA: the cooldown
+                            // starts when the weapon fires, the projectile follows FireDelay later),
+                            // so a weapon fires once per `reload`, not once per reload + fire_delay
+                            u.reload = (w.reload - t).max(0.0);
                             let team = u.team;
                             let fwd = heading_to_dir(u.heading);
                             let (fire_pos, fire_h) = match def.muzzle {
@@ -1052,8 +1064,17 @@ impl World {
                         }
                         if t >= def.attack_anim_time.max(w.fire_delay + 0.05) {
                             let u = self.units[i].as_mut().unwrap();
-                            u.attack_timer = None;
-                            u.anim = Anim::Idle;
+                            if u.reload <= 0.0 {
+                                // already reloaded: the next attack follows at once, without an idle
+                                // tick between the shots (the clip would blend back towards idle)
+                                u.attack_timer = Some(0.0);
+                                u.shot_released = false;
+                                u.attack_seq = u.attack_seq.wrapping_add(1);
+                                self.events.push(SimEvent::AttackStarted { unit: id, target: target.unwrap(), seq: u.attack_seq });
+                            } else {
+                                u.attack_timer = None;
+                                u.anim = Anim::Idle;
+                            }
                         }
                     }
                 }
