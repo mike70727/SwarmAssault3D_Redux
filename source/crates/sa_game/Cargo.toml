@@ -17,3 +17,7 @@ bevy.workspace = true
 serde.workspace = true
 ron.workspace = true
 rand.workspace = true
+# "Get the original art and sound" (original_download.rs): HTTPS download, SHA-1 check, unzip
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha1_smol = "1"
+flate2 = "1"

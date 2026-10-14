@@ -19,6 +19,7 @@ mod orig_menu;
 mod orig_select;
 mod orig_ui;
 mod original;
+mod original_download;
 mod plants;
 mod progress;
 mod screenshot;
@@ -209,7 +210,7 @@ fn main() {
         .add_plugins(SystemInformationDiagnosticsPlugin)
         .insert_state(initial)
         // first: the interface, ground and audio plugins look for the original game's files
-        .add_plugins((original::OriginalPlugin, orig_ui::OrigUiPlugin, orig_menu::OrigMenuPlugin, orig_fx::OrigFxPlugin, ground::GroundPlugin, plants::PlantsPlugin, orig_game_menu::OrigGameMenuPlugin, orig_select::OrigSelectPlugin))
+        .add_plugins((original::OriginalPlugin, original_download::OriginalDownloadPlugin, orig_ui::OrigUiPlugin, orig_menu::OrigMenuPlugin, orig_fx::OrigFxPlugin, ground::GroundPlugin, plants::PlantsPlugin, orig_game_menu::OrigGameMenuPlugin, orig_select::OrigSelectPlugin))
         .add_plugins((
             controls::ControlsPlugin,
             assets::GameAssetsPlugin,

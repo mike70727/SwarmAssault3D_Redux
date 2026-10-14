@@ -5,6 +5,8 @@
 /saves/
 /screenshots/
 /benchmarks/
+# the original game's files (a player's copy, or the menu's download): never in the repository
+/original_game/
 /source/target/
 /source/target-win/
 /source/dist/

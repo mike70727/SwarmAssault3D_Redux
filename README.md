@@ -14,7 +14,8 @@ interface are the original's; the battlefield is 3-D. Every bug, turret, plant a
 generated with Tripo from the original's colony pictures and finished in Blender the same way.
 Each level's ground is built in 3-D from the original level layout. The code is all new: nothing
 from the 1999 game is copied into this repository. If you own the original, the game reads its
-interface, menus, ground tiles, effects and sounds from your copy while it runs.
+interface, menus, ground tiles, effects and sounds from your copy while it runs; if you don't, a
+button on the main menu downloads them the way OpenSA does.
 
 On top of the original, Redux adds a twist of its own: beat the campaign and an endless
 **Procedural Mode** opens up, with new generated levels that keep getting harder.
@@ -80,15 +81,16 @@ on top. Win and **Next Level** takes you on to a harder map: more enemy teams (u
 enemy colonies, turrets and starting units, smarter bots, then ever faster enemy breeding. It
 never ends. Lose and you can retry the same map; the game remembers how far you got.
 
-### The original's look and sound, from your own copy
+### The original's look and sound
 
-Point the game at your copy of the original and it uses the original's ground tiles, the
-sidebar with its radar and breeding buttons, the cursors, title screen, main menu, level list and
-loading screens, the in-game menu (casualties, colony takeovers, time and volume), the YOU WIN /
-GAME OVER sign, health bars beside selected units and colonies, explosions, projectiles,
-portraits and sounds. None of it is in this repository or in the game package. Without a copy
-the game uses its own look-alike interface and sound set. The screenshots on this page were
-taken with a copy installed.
+With the original's files the game uses the original's ground tiles, the sidebar with its radar
+and breeding buttons, the cursors, title screen, main menu, level list and loading screens, the
+in-game menu (casualties, colony takeovers, time and volume), the YOU WIN / GAME OVER sign, health
+bars beside selected units and colonies, explosions, projectiles, portraits and sounds. None of
+it is in this repository or in the game package: the game reads your own copy, or downloads the
+files when you press **Get the original art and sound** on its main menu, the way OpenSA's
+content installer does (see [Playing](#playing)). Without them the game uses its own look-alike
+interface and sound set. The screenshots on this page were taken with the original's files.
 
 ### Also
 
@@ -115,6 +117,12 @@ To use the original's look and sound, put your copy of *Swarm Assault* in a fold
 `original_game\Swarm Assault` inside the game folder or in the folder above it, or set
 `original_game_dir` in `assets/data/settings.ron` to the folder that holds `Game\Game.DDF`. A copy
 installed in `C:\Program Files (x86)\Swarm Assault` is found too.
+
+No copy? Press **Get the original art and sound** on the main menu. Like OpenSA's installer it
+downloads the archive of the original's data files that OpenSA uses (20.6 MB, from the same
+mirrors), refuses it unless its SHA-1 checksum matches, and unpacks only the pictures, animations
+and sounds (no movies) into `original_game\Swarm Assault` in the game folder. When it is done the
+button restarts the game with them. The files stay on your PC.
 
 | Control | Action |
 |---|---|
@@ -170,18 +178,23 @@ More in [docs/BUILD_WINDOWS.md](docs/BUILD_WINDOWS.md).
 
 ## Faithfulness
 
-Health, damage and range of every bug, neutral creature and colony turret are the original
-program's own numbers, read from its code. Other unit and colony numbers come from OpenSA, a fan
-re-implementation of *Swarm Assault* on the OpenRA engine. Where the original's own data files
-could settle a question (creature counts per level, animations, turret mounts, the interface
-layout), they did. [docs/GAMEPLAY_RESEARCH.md](docs/GAMEPLAY_RESEARCH.md) lists what is verified
-and what is assumed. Procedural Mode is the one deliberate addition.
+Health, damage and range of every bug, neutral creature and colony turret, the bugs' walking
+speeds and the colonies' breeding times are the original program's own numbers, read from its
+code. The rest comes from OpenSA, a fan re-implementation of *Swarm Assault* on the OpenRA engine,
+checked against the original wherever its code could settle it; a few of OpenSA's rules are kept
+on purpose where they make the better game. Where the original's own data files could settle a
+question (creature counts per level, animations, turret mounts, the interface layout), they did.
+[docs/GAMEPLAY_RESEARCH.md](docs/GAMEPLAY_RESEARCH.md) lists what is verified, what is assumed and
+which OpenSA rules were kept. Procedural Mode is the one deliberate addition.
 
 ## Credits and license
 
 * *Swarm Assault* was made by Gate 5 Creations in 1999 and published by Mountain King Studios.
   This is an unofficial fan recreation, not affiliated with or endorsed by them.
 * The levels were converted from the OpenSA project's maps ([docs/LEVELS.md](docs/LEVELS.md)).
+  The download of the original's art and sound uses OpenSA's mirror list and checksum; the archive
+  is hosted for OpenSA by [Project Perfect Mod](https://www.ppmsite.com) and the OpenRA mirror at
+  baxxster.no. Thank you.
 * Built with [Bevy](https://bevy.org) and [Blender](https://www.blender.org); the colony models
   were generated with [Tripo](https://www.tripo3d.ai) by mike70727.
 * Made by [mike70727](https://github.com/mike70727), with Claude (Anthropic) writing the code,

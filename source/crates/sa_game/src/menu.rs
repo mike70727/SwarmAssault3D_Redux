@@ -36,6 +36,9 @@ pub enum MenuAction {
     Settings,
     /// Play the current level of the procedural run (unlocked by finishing the campaign).
     StartProcedural,
+    /// Download the original game's art and sound (OpenSA's way, original_download.rs); once they
+    /// are in, restart the game to use them.
+    GetOriginal,
 }
 
 /// End-of-level overlay (level complete / defeated).
@@ -60,6 +63,7 @@ struct MenuExtra<'w, 's> {
     ui: Res<'w, UiAssets>,
     settings_overlays: Query<'w, 's, Entity, With<crate::settings_menu::SettingsOverlay>>,
     orig: Option<Res<'w, crate::orig_ui::OrigUi>>,
+    download: Res<'w, crate::original_download::OriginalDownload>,
 }
 
 /// Root entity of the main-menu UI (rebuilt when the level page changes).
@@ -139,17 +143,26 @@ pub(crate) fn list_maps() -> Vec<MapEntry> {
     out
 }
 
-fn setup_menu(mut commands: Commands, page: Res<MenuPage>, progress: Res<Progress>, settings: Res<Settings>, ui: Res<UiAssets>, orig: Option<Res<crate::orig_ui::OrigUi>>) {
+fn setup_menu(
+    mut commands: Commands,
+    page: Res<MenuPage>,
+    progress: Res<Progress>,
+    settings: Res<Settings>,
+    ui: Res<UiAssets>,
+    orig: Option<Res<crate::orig_ui::OrigUi>>,
+    download: Res<crate::original_download::OriginalDownload>,
+) {
     commands.spawn((Camera2d, DespawnOnExit(AppState::Menu)));
     // with the original game its own menus are used (orig_menu.rs)
     if orig.is_none() {
-        build_menu(&mut commands, page.0, &progress, settings.unlock_all_levels, &ui);
+        build_menu(&mut commands, page.0, &progress, settings.unlock_all_levels, &ui, &download);
     }
 }
 
 
-/// Spawns the main-menu UI for one page of the level list: the level buttons in a stone dialog.
-fn build_menu(commands: &mut Commands, page: usize, progress: &Progress, unlock_all: bool, ui: &UiAssets) {
+/// Spawns the main-menu UI for one page of the level list: the level buttons in a stone dialog,
+/// and (no copy of the original was found) the button that downloads the original's art and sound.
+fn build_menu(commands: &mut Commands, page: usize, progress: &Progress, unlock_all: bool, ui: &UiAssets, download: &crate::original_download::OriginalDownload) {
     let maps = list_maps();
     let pages = maps.len().div_ceil(PAGE_SIZE).max(1);
     let page = page.min(pages - 1);
@@ -199,6 +212,9 @@ fn build_menu(commands: &mut Commands, page: usize, progress: &Progress, unlock_
                     dialog_button(row, ui, "Settings", 216.0, MenuAction::Settings);
                     dialog_button(row, ui, "Quit", 216.0, MenuAction::Quit);
                 });
+                if crate::original_download::offered() {
+                    crate::original_download::spawn_offer(panel, ui, download);
+                }
             });
             p.spawn((
                 Text::new("Left click selects, right click orders, T attack-move, Esc menu, F1 help in the game.\nLevels converted from the OpenSA re-implementation (docs/LEVELS.md)."),
@@ -236,8 +252,17 @@ fn on_activate(
             for r in &extra.roots {
                 commands.entity(r).despawn();
             }
-            build_menu(&mut commands, extra.page.0, &extra.progress, extra.settings.unlock_all_levels, &extra.ui);
+            build_menu(&mut commands, extra.page.0, &extra.progress, extra.settings.unlock_all_levels, &extra.ui, &extra.download);
         }
+        MenuAction::GetOriginal => match extra.download.phase() {
+            crate::original_download::Phase::Done(_) => {
+                if crate::original_download::restart() {
+                    exit.write(AppExit::Success);
+                }
+            }
+            p if p.running() => {}
+            _ => extra.download.start(),
+        },
         MenuAction::StartProcedural => {
             cli.map = extra.progress.procedural_map();
             cli.load = None;

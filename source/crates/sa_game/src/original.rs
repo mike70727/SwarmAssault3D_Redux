@@ -4,8 +4,9 @@
 //!
 //! Nothing from the original game ships with Swarm Assault 3D. When a copy is found (settings
 //! `original_game_dir`, the `SA_ORIGINAL` variable, or an `original_game\Swarm Assault` folder next
-//! to or above the game folder) the game uses its ground, interface, effects and sounds; without
-//! one every system falls back to the game's own assets.
+//! to or above the game folder, which is where the main menu's download puts it:
+//! original_download.rs) the game uses its ground, interface, effects and sounds; without one every
+//! system falls back to the game's own assets.
 //!
 //! File formats as documented by OpenSA (OpenRA.Mods.OpenSA: DdfPackage.cs, DdfLoader.cs,
 //! SdfPackage.cs, SdfLoader.cs, PaletteFromDdf.cs, MapImporter.cs).
