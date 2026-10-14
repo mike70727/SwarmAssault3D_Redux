@@ -318,20 +318,24 @@
             name: "Savage Scorpion", family: Scorpion, role: Light, hp: 17528.0, speed: 2.39, turn_rate: 480.0, radius: 0.5,
             scan_range: 6.0, build_time: 10.0, weapon: Some("scorpion_sting"), melee: true, aggressive: true,
             model: "scorpion_savage", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
+            // the sting barb at the strike (scorpion crew, measured on the GLB)
+            muzzle: Some((0.0, 0.33, 0.53)),
             source: "opensa scorpions_light: HP 17528, Speed 98, BuildDuration 250, stance AttackAnything",
         ),
         "scorpion_spear_gun": (
             name: "Spear Gun Scorpion", family: Scorpion, role: Medium, hp: 8600.0, speed: 2.0, turn_rate: 420.0, radius: 0.5,
             scan_range: 17.0, build_time: 20.0, weapon: Some("scorpion_spear"), aggressive: false,
             model: "scorpion_spear_gun", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
-            muzzle: Some((0.0, 0.7, 0.05)),
+            // the harpoon tip as it leaves the tail launcher (scorpion crew, measured on the GLB)
+            muzzle: Some((0.0, 0.87, 0.16)),
             source: "opensa scorpions_medium: HP 8600, Speed 82, BuildDuration 500, ScanRadius 17",
         ),
         "scorpion_ninja": (
             name: "Ninja Scorpion", family: Scorpion, role: Heavy, hp: 12900.0, speed: 2.56, turn_rate: 480.0, radius: 0.5,
             scan_range: 13.0, build_time: 30.0, weapon: Some("scorpion_star"), aggressive: false,
             model: "scorpion_ninja", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
-            muzzle: Some((0.0, 0.7, 0.05)),
+            // the star's release point above the body (scorpion crew, measured on the GLB)
+            muzzle: Some((0.0, 0.95, 0.02)),
             source: "opensa scorpions_heavy: HP 12900, Speed 105, BuildDuration 750, ScanRadius 13",
         ),
         // --------------------------------------------------------------- wasps
