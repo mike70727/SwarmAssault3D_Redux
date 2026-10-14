@@ -340,6 +340,9 @@ pub struct Cheats {
     pub no_cap: bool,
 }
 
+/// Most plants of one kind that seeds may grow into (well above any level's own count).
+const MAX_SEEDED_PLANTS: usize = 60;
+
 /// Why a damage was dealt (for stats and friendly-fire rules).
 #[derive(Clone, Copy, Debug)]
 struct Hit {
@@ -1538,8 +1541,12 @@ impl World {
                     && self.grid.in_bounds(self.grid.cell_of(pos))
                 {
                     if self.defs.units[kind as usize].plant.is_some() {
-                        let h = self.rng.random_range(0.0..TAU);
-                        self.spawn_unit(kind, 0, pos, h);
+                        // seeds can only re-seed so far: a long fight in the swamp must not drown
+                        // the map in Seed Balls (OpenSA has no such limit; it is a safety net)
+                        if self.living_units().filter(|u| u.kind == kind).count() < MAX_SEEDED_PLANTS {
+                            let h = self.rng.random_range(0.0..TAU);
+                            self.spawn_unit(kind, 0, pos, h);
+                        }
                     } else {
                         // a downed pilot carries on like a pirate
                         let nid = self.spawn_unit(kind, team, pos, heading);
