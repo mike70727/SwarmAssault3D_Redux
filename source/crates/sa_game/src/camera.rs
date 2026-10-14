@@ -53,7 +53,7 @@ impl Plugin for CameraPlugin {
     }
 }
 
-fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Settings>, cli: Res<crate::CliOptions>) {
+fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Settings>, cli: Res<crate::CliOptions>, mut images: ResMut<Assets<Image>>) {
     let size = sim.world.grid.size();
     // start looking at the human team's first colony (or the --focus point)
     let team = sim.human_team();
@@ -76,6 +76,16 @@ fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Setting
         max_distance,
         map_size: size,
     };
+    // the sun from the west-south-west, high: the faces the camera sees stay lit, but every model
+    // gets a shaded side and casts its shadow to the right, like the original's renders lit from
+    // the front left (from behind the camera everything looked flat; from the north-west, backlit)
+    let sun = Quat::from_euler(EulerRot::YXZ, -1.1, -0.95, 0.0);
+    // reflections: a sky with the level's own ground below the horizon, filtered on the GPU
+    let ground = crate::ground::radar_palette(&sim.world.map.tileset)[0].map(|c| c / 255.0);
+    let sky = images.add(crate::envmap::sky_cubemap(ground, sun * Vec3::Z));
+    // sky 500 + ambient 40 (was ambient 220 alone): chrome and gunmetal show sky and ground, the
+    // shade keeps about its old depth (qa\envmap: 800 washed the ground shadows out)
+    let (env_intensity, ambient) = (500.0, 40.0);
     commands.spawn((
         MainCamera,
         DespawnOnExit(AppState::InGame),
@@ -85,18 +95,17 @@ fn setup_camera(mut commands: Commands, sim: Res<GameSim>, settings: Res<Setting
         settings.msaa(),
         // ACES keeps the team colours saturated (the default TonyMcMapface washes them out)
         Tonemapping::AcesFitted,
+        GeneratedEnvironmentMapLight { environment_map: sky, intensity: env_intensity, ..default() },
     ));
     commands.insert_resource(cam);
-    // the sun from the west-south-west, high: the faces the camera sees stay lit, but every model
-    // gets a shaded side and casts its shadow to the right, like the original's renders lit from
-    // the front left (from behind the camera everything looked flat; from the north-west, backlit)
     commands.spawn((
         DespawnOnExit(AppState::InGame),
         DirectionalLight { illuminance: 5500.0, shadow_maps_enabled: settings.shadows, ..default() },
         CascadeShadowConfigBuilder { num_cascades: settings.shadow_cascades.clamp(1, 4), first_cascade_far_bound: 20.0, maximum_distance: settings.shadow_distance.max(20.0), ..default() }.build(),
-        Transform::from_rotation(Quat::from_euler(EulerRot::YXZ, -1.1, -0.95, 0.0)),
+        Transform::from_rotation(sun),
     ));
-    commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.8, 0.85, 1.0), brightness: 220.0, ..default() });
+    // the sky now lights the shade too; the flat ambient only fills in a little
+    commands.insert_resource(GlobalAmbientLight { color: Color::srgb(0.8, 0.85, 1.0), brightness: ambient, ..default() });
 }
 
 fn camera_input(

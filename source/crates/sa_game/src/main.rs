@@ -8,6 +8,7 @@ mod audio;
 mod bench;
 mod camera;
 mod controls;
+mod envmap;
 mod ground;
 mod hud;
 mod menu;

@@ -93,7 +93,7 @@ pub struct RadarBase {
 
 /// Radar colours of the four layers per tileset (ground, water, rock, vegetation), after the
 /// colours of the original tiles.
-fn radar_palette(tileset: &str) -> [[f32; 3]; 4] {
+pub(crate) fn radar_palette(tileset: &str) -> [[f32; 3]; 4] {
     let c = |h: u32| [((h >> 16) & 255) as f32, ((h >> 8) & 255) as f32, (h & 255) as f32];
     match tileset {
         "desert" => [c(0xb77c48), c(0x4a3a30), c(0x847d76), c(0x5a4a40)],
