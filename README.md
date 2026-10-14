@@ -36,6 +36,18 @@ repeatable Blender Python scripts.
 * Realism pass on every model: subdivided bodies, procedural chitin / metal / membrane / fur
   surfaces baked to colour, roughness-metallic and normal textures (`docs/ASSET_NOTES.md`,
   "Realism pass"); team colour stays a runtime tint over the textures.
+* With the player's own copy of the original game (found next to the package or set in
+  `settings.ron`; read as data, nothing of it is shipped): the 3-D ground is built from each
+  level's original layout, and the game uses the original's sidebar, cursors, menus (title, main
+  menu, level list, loading screens with the level name, the in-game / Game Over menu with
+  casualties, colony takeovers and time), YOU WIN / GAME OVER sign, health bars beside selected
+  units and colonies, explosions, projectile pictures, name plates, portraits and sounds.
+* The original's neutral creatures, with each level's own counts: creep plants that grow, fight
+  and regrow (Popcorn Plant, Thorn Bush, Seed Ball and its seeds, Choc Freckle, Death Lollies;
+  built in 3-D with moving parts) and flyers with their bombing patterns (the Dragonfly bombs to
+  either side as it passes, the Desert Fly's bombs split, Spawn Moths sow seeds, the Flying
+  Machine drops a pilot). Missile spiders' homing rockets loop round a moving target until they hit.
+* Sound starts at volume 0; turn it up in Settings or with the in-game menu's slider.
 
 ![realism pass](docs/screenshots/realism_colony_ant_red_ingame.jpg)
 
