@@ -37,6 +37,7 @@ pub struct ColonyView {
     pub id: u32,
     pub team: u8,
     pub defeated: bool,
+    pub model: String,
 }
 
 #[derive(Component)]
@@ -45,6 +46,14 @@ pub struct TurretNode {
     pub index: usize,
     pub fire_seq: u32,
     pub recoil: f32,
+    /// The node's rest position (the recoil kicks it back from here).
+    pub rest: Option<Vec3>,
+}
+
+/// On a colony scene's animation player: its idle clip still has to be started.
+#[derive(Component)]
+struct ColonyAnim {
+    model: String,
 }
 
 #[derive(Component)]
@@ -91,7 +100,7 @@ impl Plugin for ViewsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ViewIndex>().init_resource::<AnimStats>().add_systems(
             Update,
-            (sync_units, sync_colonies, sync_bits, sync_projectiles, spawn_impacts, animate_impacts, sync_animations, animate_turrets, draw_status_rings)
+            (sync_units, sync_colonies, sync_bits, sync_projectiles, spawn_impacts, animate_impacts, sync_animations, start_colony_idle, animate_turrets, draw_status_rings)
                 .chain()
                 .run_if(in_state(AppState::InGame)),
         );
@@ -206,6 +215,7 @@ fn on_scene_ready(
     let view_entity = parents.get(root).ok().map(|p| p.parent());
     let model_name = view_entity.and_then(|v| views.get(v).ok()).map(|v| v.model.clone());
     let colony_id = view_entity.and_then(|v| colony_views.get(v).ok()).map(|c| c.id);
+    let colony_model = view_entity.and_then(|v| colony_views.get(v).ok()).map(|c| c.model.clone());
     for child in children.iter_descendants(root) {
         if let (Some(t), Ok(name)) = (&tint, mat_names.get(child)) {
             let (tint_color, key) = match base_material_name(&name.0) {
@@ -239,11 +249,19 @@ fn on_scene_ready(
                 st.ready = true;
                 stats.players_bound += 1;
             }
+            // colonies loop their idle clip (the turrets are turned by animate_turrets)
+            if let Some(model) = &colony_model
+                && let Some(m) = assets.model(model)
+                && let Some(graph) = &m.graph
+                && m.clips.contains_key("idle")
+            {
+                commands.entity(child).insert((AnimationGraphHandle(graph.clone()), ColonyAnim { model: model.clone() }));
+            }
         }
         if let (Some(cid), Ok(n)) = (colony_id, names.get(child)) {
             let n = n.as_str();
             if let Some(idx) = n.strip_prefix("Turret_").and_then(|s| s.parse::<usize>().ok()) {
-                commands.entity(child).insert(TurretNode { colony: cid, index: idx.saturating_sub(1), fire_seq: 0, recoil: 0.0 });
+                commands.entity(child).insert(TurretNode { colony: cid, index: idx.saturating_sub(1), fire_seq: 0, recoil: 0.0, rest: None });
             }
         }
     }
@@ -364,7 +382,7 @@ fn sync_colonies(
         let tf = Transform::from_translation(sim_to_world(c.pos, ground_at(&ground, c.pos) - 0.04));
         let model = assets.model(&def.model);
         let use_model = model.is_some_and(|m| m.ready && m.scene.is_some());
-        let mut e = commands.spawn((ColonyView { id: c.id, team: c.team, defeated: !c.active() }, DespawnOnExit(AppState::InGame), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, c.id))));
+        let mut e = commands.spawn((ColonyView { id: c.id, team: c.team, defeated: !c.active(), model: def.model.clone() }, DespawnOnExit(AppState::InGame), tf, Visibility::default(), Name::new(format!("{} #{}", def.name, c.id))));
         if use_model {
             let scene = model.unwrap().scene.clone().unwrap();
             e.with_children(|p| {
@@ -378,7 +396,7 @@ fn sync_colonies(
             e.with_children(|p| {
                 p.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_xyz(0.0, -0.9, 0.0).with_scale(Vec3::new(1.0, 0.55, 1.0))));
                 for (i, t) in def.turrets.iter().enumerate() {
-                    p.spawn((Mesh3d(turret_mesh.clone()), MeshMaterial3d(dark.clone()), TurretNode { colony: c.id, index: i, fire_seq: 0, recoil: 0.0 }, Transform::from_xyz(t.offset.x, t.height, t.offset.y).with_scale(Vec3::splat(2.2))));
+                    p.spawn((Mesh3d(turret_mesh.clone()), MeshMaterial3d(dark.clone()), TurretNode { colony: c.id, index: i, fire_seq: 0, recoil: 0.0, rest: None }, Transform::from_xyz(t.offset.x, t.height, t.offset.y).with_scale(Vec3::splat(2.2))));
                 }
             });
         }
@@ -429,6 +447,7 @@ fn animate_turrets(sim: Res<GameSim>, time: Res<Time>, mut stats: ResMut<AnimSta
     for (mut node, mut tf) in q.iter_mut() {
         let Some(c) = sim.world.colonies.get(node.colony as usize) else { continue };
         let Some(t) = c.turrets.get(node.index) else { continue };
+        let rest = *node.rest.get_or_insert(tf.translation);
         if t.fire_seq != node.fire_seq {
             node.fire_seq = t.fire_seq;
             node.recoil = 1.0;
@@ -440,6 +459,22 @@ fn animate_turrets(sim: Res<GameSim>, time: Res<Time>, mut stats: ResMut<AnimSta
             stats.turret_rotations += 1;
         }
         tf.rotation = rot;
+        // the shot kicks the turret back along its barrels, then it eases forward again
+        let kick = node.recoil * node.recoil * 0.12;
+        tf.translation = rest - rot * Vec3::Z * kick;
+    }
+}
+
+/// Starts the idle clip of every colony scene once its animation player exists.
+fn start_colony_idle(mut commands: Commands, assets: Res<GameAssets>, mut stats: ResMut<AnimStats>, mut players: Query<(Entity, &ColonyAnim, &mut AnimationPlayer)>) {
+    for (e, anim, mut player) in players.iter_mut() {
+        if let Some(m) = assets.model(&anim.model)
+            && let Some(node) = m.clips.get("idle")
+        {
+            player.play(*node).repeat();
+            *stats.clip_starts.entry("colony_idle".to_string()).or_insert(0) += 1;
+        }
+        commands.entity(e).remove::<ColonyAnim>();
     }
 }
 
