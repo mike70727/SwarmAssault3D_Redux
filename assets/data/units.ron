@@ -254,21 +254,24 @@
         "ant_soldier": (
             name: "Ant Soldier", family: Ant, role: Light, hp: 5300.0, speed: 2.56, turn_rate: 540.0, radius: 0.38,
             scan_range: 6.0, build_time: 5.0, weapon: Some("ant_bite"), melee: true, aggressive: true,
-            model: "ant_soldier", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            // 0.45: the bite clip fills the 0.5 s bite cycle, so the biting reads as continuous (ant crew)
+            model: "ant_soldier", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
             source: "opensa ants_light: HP 5300, Speed 105, BuildDuration 125, ScanRadius 6, stance AttackAnything",
         ),
         "ant_grenadier": (
             name: "Ant Grenadier", family: Ant, role: Medium, hp: 4400.0, speed: 2.25, turn_rate: 540.0, radius: 0.38,
             scan_range: 6.0, build_time: 8.0, weapon: Some("ant_grenade"), aggressive: false,
             model: "ant_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
-            muzzle: Some((0.0, 0.45, 0.2)),
+            // the grenade in the raised right foreleg at release (ant crew, measured on the GLB)
+            muzzle: Some((0.32, 0.70, 0.38)),
             source: "opensa ants_medium: HP 4400, Speed 92, BuildDuration 200, FireDelay 10",
         ),
         "ant_bazooka": (
             name: "Ant Bazooka", family: Ant, role: Heavy, hp: 7350.0, speed: 1.9, turn_rate: 480.0, radius: 0.4,
             scan_range: 10.0, build_time: 14.0, weapon: Some("ant_rocket"), aggressive: false,
             model: "ant_bazooka", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
-            muzzle: Some((0.12, 0.42, 0.45)),
+            // the tube mouth on the right shoulder on the fire frame (ant crew, measured on the GLB)
+            muzzle: Some((0.25, 0.56, 0.44)),
             source: "opensa ants_heavy: HP 7350, Speed 78, BuildDuration 350, ScanRadius 10, FireDelay 9",
         ),
         // ------------------------------------------------------------- beetles
@@ -397,13 +400,14 @@
         "neutral_bull_ant": (
             name: "Bull Ant", family: Neutral, role: Creep, hp: 5300.0, speed: 2.56, turn_rate: 540.0, radius: 0.42,
             scan_range: 8.0, build_time: 5.0, weapon: Some("bull_bite"), melee: true, aggressive: true,
-            model: "neutral_bull_ant", model_scale: 1.1, attack_anim_time: 0.4, death_time: 1.2,
+            model: "neutral_bull_ant", model_scale: 1.1, attack_anim_time: 0.45, death_time: 1.2,
             source: "opensa ant_bull_pirate: HP 5300, Speed 105, ScanRadius 8, AttackAnything",
         ),
         "neutral_pirate_grenadier": (
             name: "Pirate Grenadier", family: Neutral, role: Creep, hp: 4400.0, speed: 2.25, turn_rate: 540.0, radius: 0.4,
             scan_range: 8.0, build_time: 8.0, weapon: Some("pirate_grenade"), aggressive: true,
             model: "neutral_pirate_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
+            muzzle: Some((0.32, 0.70, 0.38)),
             source: "opensa ants_grenadier_pirate: HP 4400, Speed 92, ScanRadius 8",
         ),
         // -------------------------------------------------------- creep plants

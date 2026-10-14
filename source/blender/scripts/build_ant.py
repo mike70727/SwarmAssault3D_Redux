@@ -51,8 +51,33 @@ Legs (rebuilt by the second ant crew, see qa/agents/ants/shift2/):
 * Checked numerically on the exported GLBs: qa/agents/ants/shift2/glb_feet.py (numpy glTF
   skinning, what the game plays) and check_legs.py (deformed mesh in Blender).
 
+Attack clips (attack crew, qa/agents/ant_attacks/; studied from all eight facings of the original
+UNANT??_AT* frames in Game.ANI / Game.DDF - two frames each, frame 2 carries the original's
+[Damage] / [Fire Point] script and the "Launch Point" - and timed to the game: views.rs restarts
+`attack` at every shot, sa_sim fires `fire_delay` s after the start and units.ron sets the playback
+length `attack_anim_time`):
+* Soldier / Bull Ant (UNANTSO?_AT, 150 + 150 ms): frame 1 the ring mandibles swing open into two
+  sickles (~40 deg each: tips 15 px apart, 19-20 px overall, against the closed ring's 13-15 px),
+  frame 2 [Damage] they snap back into the ring; the body lunges forward ~2-3 px (0.1 cell) over
+  its planted feet.  Bites repeat every 0.32 s reload, so the clip starts and ends in the attack
+  stance (lunged, mandibles half open); the snap lands at clip frame 4 = the bite's fire_delay
+  0.15 s (attack_anim_time 0.4-0.45).
+* Grenadier / Pirate Grenadier (UNANTRG?_AT, 400 + 400 ms): frame 1 the RIGHT foreleg is raised
+  with a blue grenade (sprite colour 73,86,128) beside the head, frame 2 [Fire Point] it has swung
+  forward and the grenade leaves at the Launch Point (sprite px, all facings: ~8 px ahead, ~7 px to
+  the right).  Here: the foreleg rises, the grenade comes out of the pack into its claw, cocks back,
+  swings forward and is released at clip frame 12 = fire_delay 0.4 s (the game's projectile takes
+  over; the held grenade vanishes and returns to the pack), the leg plants again by the end.
+* Bazooka (UNANTBZ?_AT, 200 + 400 ms): the tube that lies diagonally over the back in stand / walk
+  is shouldered on the RIGHT side, parallel to the body and pointing ahead (Launch Point ~11 px
+  ahead, ~7 px right); the body stands up taller with the legs drawn in; frame 2 [Fire Point] adds
+  a bright back-blast at the tube's rear end (248,247,161 / 249,194,96).  Here: shoulder, aim,
+  fire at clip frame 11 = fire_delay 0.36 s with the back-blast flash (an emissive cone that is
+  scaled up from inside the breech), recoil, swing the tube back onto the back by the end.
+
 Conventions: 1 unit = 1 cell, Z up, rest pose faces -Y, origin on the ground at the body centre.
-Materials: M_Team (whole body), M_Eye, M_Pack (grenade pack), M_Accent / M_Black (bazooka tube).
+Materials: M_Team (whole body), M_Eye, M_Pack (grenade pack), M_Grenade (held grenade),
+M_Accent / M_Black (bazooka tube), M_Flash (bazooka back-blast, emissive).
 Clips: idle / move / attack / death.
 
 Usage:  blender -b --factory-startup --python build_ant.py -- [variant ...]   (default: ant_soldier)
@@ -64,7 +89,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
-from mathutils import Vector  # noqa: E402
+from mathutils import Matrix, Vector  # noqa: E402
 import salib  # noqa: E402
 from salib import BoneDef, Body, Clip, LegSpec  # noqa: E402
 
@@ -101,6 +126,38 @@ MOVE_LIFT = 0.085    # swing height of a foot
 # stance windows of the front / rear pairs pushed forward / back so a landing middle foot never
 # meets the front / rear foot of the same side at the tripod switch (matters for the 0.88 bodies)
 STANCE_DY = {"1": -0.03, "2": 0.0, "3": 0.03}
+
+# ---- attack timing (units.ron / weapons, read only): the game restarts `attack` at every shot,
+# plays it over attack_anim_time and fires fire_delay s after the start.  Each clip is keyed on
+# frames 0..n (n / 30 s long) and puts its strike / release on the frame that is fire_delay into
+# the clip at the default attack_anim_time:
+#   soldier / bull ant: bite fire_delay 0.15 of attack_anim_time 0.4  -> snap shut on frame 4 of 12
+#   grenadier / pirate: grenade fire_delay 0.40 of 0.7                -> release on frame 12 of 21
+#   bazooka:            rocket fire_delay 0.36 of 0.6                 -> fire on frame 11 of 18
+ATTACK_HIT_FRAME = {"bite": 4, "grenade": 12, "bazooka": 11}
+GRENADE_R = 0.066                                  # held grenade radius (x scale): a ~3 px ball
+
+
+def GRENADE_REST(V):
+    """The grenade waits inside the pack (the pack's centre)."""
+    return V(0.0, 0.11, 0.50)
+
+
+def BAZOOKA_REST(V):
+    """Bazooka tube at rest: (rear, front) - diagonal over the back like the stand / walk sprites.
+    0.72 cell long (x0.91): the shouldered tube in the attack frames is 14-18 px (0.6-0.75 cell) and
+    the portrait shows it a little over half the body length (it was 0.89 before the attack crew)."""
+    return V(0.04, 0.16, 0.55), V(-0.17, -0.60, 0.50)
+
+
+FLASH_GROW = 12.0                                  # the back-blast cone is modelled this much smaller
+
+
+def FLASH_HEAD(rear, d, R):
+    """Pivot of the back-blast (bone "flash"): just inside the breech cap, which runs from
+    rear - 0.02 to rear + 0.12 along the tube, so the shrunken cone hides inside it at rest and
+    scaled up it reaches ~0.18 cell out of the tube's back end."""
+    return rear + d * R(0.005)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -321,6 +378,11 @@ def ant_materials(neutral: bool):
     # ("metal" would force metallic >= 0.8, which renders near-black in the game without reflections)
     mats["M_Accent"] = salib.material("M_Accent", (0.52, 0.53, 0.56), roughness=0.36, metallic=0.35, kind="glossy")
     mats["M_Black"] = salib.material("M_Black", (0.05, 0.05, 0.06), roughness=0.35, kind="chitin", coat=0.8, variation=0.15)
+    # the grenade the grenadier throws: the original's dark slate blue (sprite 73,86,128 / 48,54,88)
+    mats["M_Grenade"] = salib.material("M_Grenade", (0.27, 0.32, 0.52), roughness=0.32, kind="glossy")
+    # bazooka back-blast: the sprite's hot pale yellow / orange flash, emissive so it glows in game
+    mats["M_Flash"] = salib.material("M_Flash", (1.0, 0.86, 0.45), roughness=0.5, kind="emissive",
+                                     emission=(1.0, 0.78, 0.32), emission_strength=2.5)
     return mats
 
 
@@ -399,6 +461,210 @@ def loop_from_zero(act, frames):
     return act
 
 
+def from_zero(act, frames):
+    """A one-shot clip keyed on 0..frames (the attack): the GLB clip starts at t = 0 on its first
+    pose, which matters because the game restarts it at every shot."""
+    act.frame_range = (0, frames)
+    act.use_frame_range = True
+    act.use_cyclic = False
+    return act
+
+
+# ------------------------------------------------------------------------------------------------
+# attack helpers (attack crew)
+# ------------------------------------------------------------------------------------------------
+def hand_point(spec, s):
+    """Where the right foreleg's claw holds the grenade: just past the toe tip and a little up."""
+    ankle, toe = Vector(spec.foot), Vector(spec.toe)
+    tip = Vector((toe.x, toe.y, toe.z + spec.radius * 0.36))
+    d = (tip - ankle).normalized()
+    return tip + d * (0.040 * s) + Vector((0, 0, 0.040 * s))
+
+
+def add_copy_location(rig, bone, target, name):
+    salib.select_only([rig])
+    bpy.ops.object.mode_set(mode="POSE")
+    c = rig.pose.bones[bone].constraints.new("COPY_LOCATION")
+    c.name = name
+    c.target = rig
+    c.subtarget = target
+    c.influence = 0.0
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return c
+
+
+def key_influence(con, frame, value):
+    con.influence = value
+    con.keyframe_insert("influence", frame=frame)
+
+
+def key_bone_matrix(clip, rig, bone, frame, desired):
+    """Key `bone` (loc + rot) so that - with its parent at rest - its armature-space matrix is
+    `desired`; the bone follows its parent's animation on top of that."""
+    basis = rig.data.bones[bone].matrix_local.inverted() @ desired
+    loc, rot, _ = basis.decompose()
+    clip.key(bone, frame, loc=tuple(loc), rot=tuple(math.degrees(a) for a in rot.to_euler("XYZ")))
+
+
+def tube_pose(rig, rest_rear, rest_front, muzzle, axis):
+    """Armature-space matrix of bone "bazooka" (head = rear, tail = front) with its tail (the
+    muzzle) at `muzzle` and the tube along `axis` (minimal rotation from the rest direction)."""
+    rest_rear, rest_front, muzzle, axis = (Vector(v) for v in (rest_rear, rest_front, muzzle, axis))
+    axis.normalize()
+    L = (rest_front - rest_rear).length
+    q = (rest_front - rest_rear).normalized().rotation_difference(axis)
+    new_rear = muzzle - axis * L
+    return (Matrix.Translation(new_rear) @ q.to_matrix().to_4x4() @ Matrix.Translation(-rest_rear)
+            @ rig.data.bones["bazooka"].matrix_local)
+
+
+def ik_reach_report(rig, spec, offsets):
+    """For a foot path given as armature-space offsets, the hip-to-ankle distance vs the leg's
+    femur + tibia reach (min |f - t| .. max f + t): a key outside it would leave a gap."""
+    mid, knee, ankle = leg_mid(spec), Vector(spec.knee), Vector(spec.foot)
+    f, t = (knee - mid).length, (ankle - knee).length
+    out = []
+    for frame, off in offsets:
+        d = (ankle + Vector(off) - mid).length
+        out.append((frame, round(d, 3)))
+    salib.log(f"{spec.name} reach {abs(f - t):.3f}..{f + t:.3f}: hip-ankle per key (body at rest)", out)
+
+
+def key_attack_bite(c, rig, specs, s, n):
+    """Soldier / Bull Ant bite (UNANTSO?_AT): starts and ends in the attack stance (lunged forward,
+    mandibles half open) so back-to-back restarts read as continuous biting; the mandibles swing
+    open into sickles (~40 deg each) and snap shut into the ring on the hit frame while the body
+    lunges forward over its planted feet."""
+    hit = ATTACK_HIT_FRAME["bite"]
+    key_chain_rest(c, specs, 0)
+    key_feet_rest(c, rig, specs, (0, n))
+    # frame: body forward, up, pitch (front up), head pitch, mandible opening (deg, each side)
+    poses = [
+        (0, 0.045, 0.012, 3.0, 4.0, 20.0),
+        (2, 0.005, 0.030, 7.0, 10.0, 40.0),
+        (hit - 1, 0.015, 0.026, 6.0, 9.0, 41.0),
+        (hit, 0.110, 0.000, -3.0, -9.0, -4.0),
+        (hit + 1, 0.105, 0.000, -2.0, -7.0, 0.0),
+        (hit + 3, 0.085, 0.004, 0.0, -3.0, 2.0),
+        (hit + 5, 0.060, 0.008, 2.0, 2.0, 9.0),
+        (n, 0.045, 0.012, 3.0, 4.0, 20.0),
+    ]
+    for f, fwd, up, pitch, head, mand in poses:
+        c.key("body", f, loc=(0, fwd * s, up * s), rot=(pitch, 0, 0))
+        c.key("head", f, rot=(head, 0, 0))
+        c.key("mandible.L", f, rot=(0, 0, mand))
+        c.key("mandible.R", f, rot=(0, 0, -mand))
+    for f, (x, z) in ((0, (-14, 9)), (2, (-24, 15)), (hit, (-10, 7)), (n, (-14, 9))):
+        c.key("antenna.L", f, rot=(x, 0, z))
+        c.key("antenna.R", f, rot=(x, 0, -z))
+    c.key("abdomen", 0, rot=(2, 0, 0)); c.key("abdomen", hit, rot=(-3, 0, 0)); c.key("abdomen", n, rot=(2, 0, 0))
+
+
+def key_attack_throw(c, rig, specs, s, n, hold):
+    """Grenadier / Pirate Grenadier throw (UNANTRG?_AT): the right foreleg lifts, takes the grenade
+    out of the pack, cocks it up beside the head and swings it forward; the grenade is released on
+    the hit frame (the game's projectile takes over: the held one shrinks away and goes back into
+    the pack) and the leg plants again.  The other five feet stay planted."""
+    hit = ATTACK_HIT_FRAME["grenade"]
+    key_chain_rest(c, specs, 0)
+    r1 = next(sp for sp in specs if sp.name == "R1")
+    key_feet_rest(c, rig, [sp for sp in specs if sp.name != "R1"], (0, n))
+    h0 = hand_point(r1, s)
+    k = s / 0.88                                    # the grenadier sizes below are for x0.88
+
+    def P(right, ahead, up):                        # unit frame (cells) -> armature space
+        return Vector((-right * k, -ahead * k, up * k))
+
+    # the claw (grenade) path: absolute targets in the unit's frame, or offsets from the rest.  The
+    # foreleg is raised high (seen from above the original's raised leg is short: the grenade sits
+    # only ~0.15 cell in front of the hip), so it stays well extended (hip-ankle 0.32-0.50 of its
+    # 0.21-0.59 reach) and the knee bends out to the right like an elbow.
+    path = [
+        (0, Vector((0, 0, 0))),
+        (2, Vector((0.0, 0.02 * k, 0.15 * k))),
+        (3, P(0.46, 0.16, 0.38) - h0),               # swings up and out round the shoulder
+        (4, P(0.28, 0.00, 0.50) - h0),               # at the pack's right side: grab
+        (6, P(0.36, 0.04, 0.64) - h0),               # lifts it out
+        (9, P(0.42, 0.12, 0.76) - h0),               # cocked high beside the head (sprite frame 1)
+        (hit - 1, P(0.38, 0.26, 0.76) - h0),
+        (hit, P(0.32, 0.38, 0.70) - h0),             # release (sprite frame 2 Launch Point)
+        (hit + 2, P(0.40, 0.58, 0.40) - h0),         # follow-through
+        (hit + 5, Vector((0.0, -0.03 * k, 0.10 * k))),
+        (n - 1, Vector((0, 0, 0.012 * k))),
+        (n, Vector((0, 0, 0))),
+    ]
+    for f, off in path:
+        key_foot(c, rig, r1, f, tuple(off))
+    ik_reach_report(rig, r1, [(f, tuple(o)) for f, o in path])
+    # the knee bends towards its pole (it rides with the body; at rest above the knee): while the
+    # leg is raised the pole sits out to the right of the hip, so the knee points out like an elbow
+    pole = "leg.R1.pole"
+    p0 = rig.data.bones[pole].head_local
+    out = P(0.78, 0.16, 0.36) - p0
+    for f, off in ((0, Vector()), (2, out * 0.5), (4, out), (hit + 2, out), (hit + 5, out * 0.4), (n, Vector())):
+        c.key(pole, f, loc=ik_local(rig, pole, tuple(off)))
+    # the grenade: inside the pack -> pulled into the claw -> released (shrinks) -> back in the pack
+    # (shown in the claw on the release frame like the original's frame 2, gone one frame later)
+    for f, infl in ((0, 0.0), (4, 0.0), (6, 1.0), (hit + 1, 1.0), (hit + 2, 0.0), (n, 0.0)):
+        key_influence(hold, f, infl)
+    for f, sc in ((0, 1.0), (hit, 1.0), (hit + 1, 0.02), (hit + 2, 0.02), (hit + 3, 1.0), (n, 1.0)):
+        c.key("grenade", f, scale=(sc, sc, sc))
+    # body: lean back while cocking (weight off the throwing side), then into the throw
+    for f, fwd, up, pitch, roll in ((0, 0, 0, 0, 0), (4, -0.010, 0.012, 2.0, -1.5), (9, -0.030, 0.030, 5.0, -3.0),
+                                    (hit, 0.070, 0.005, -5.0, -1.0), (hit + 3, 0.045, 0.0, -2.0, 0.0), (n, 0, 0, 0, 0)):
+        c.key("body", f, loc=(0, fwd * s, up * s), rot=(pitch, roll, 0))
+    for f, ang in ((0, 0), (9, 7), (hit, -5), (n, 0)):
+        c.key("head", f, rot=(ang, 0, 0))
+    for f, ang in ((0, 0), (9, -5), (hit, 6), (n, 0)):
+        c.key("abdomen", f, rot=(ang, 0, 0))
+    for sgn, b in ((1, "mandible.L"), (-1, "mandible.R")):
+        c.key(b, 0, rot=(0, 0, 0)); c.key(b, 9, rot=(0, 0, 14 * sgn)); c.key(b, hit + 1, rot=(0, 0, 0)); c.key(b, n, rot=(0, 0, 0))
+    for sgn, b in ((1, "antenna.L"), (-1, "antenna.R")):
+        c.key(b, 0, rot=(0, 0, 0)); c.key(b, 9, rot=(-18, 0, 10 * sgn)); c.key(b, hit + 2, rot=(6, 0, -4 * sgn)); c.key(b, n, rot=(0, 0, 0))
+
+
+def key_attack_bazooka(c, rig, specs, s, n, V):
+    """Bazooka shot (UNANTBZ?_AT): the tube swings from the back onto the right shoulder, parallel
+    to the body and pointing ahead; the ant stands up taller (feet planted, legs drawn in under the
+    raised body), fires on the hit frame with a back-blast flash from the breech and a recoil
+    kick, then lowers the tube onto its back again."""
+    hit = ATTACK_HIT_FRAME["bazooka"]
+    key_chain_rest(c, specs, 0)
+    key_feet_rest(c, rig, specs, (0, n))
+    rear, front = BAZOOKA_REST(V)
+    k = s / 0.91                                    # the bazooka sizes below are for x0.91
+
+    def P(right, ahead, up):
+        return Vector((-right * k, -ahead * k, up * k))
+
+    def axis(elev):
+        e = math.radians(elev)
+        return Vector((0.0, -math.cos(e), math.sin(e)))
+
+    rest = rig.data.bones["bazooka"].matrix_local.copy()
+    shoulder = tube_pose(rig, rear, front, P(0.25, 0.44, 0.47), axis(3.0))
+    kick = tube_pose(rig, rear, front, P(0.25, 0.37, 0.49), axis(9.0))
+    kick2 = tube_pose(rig, rear, front, P(0.25, 0.40, 0.48), axis(6.0))
+    # aimed and steady on the fire frame (the rocket leaves the muzzle there), the kick follows
+    for f, m in ((0, rest), (2, rest.lerp(shoulder, 0.35)), (5, shoulder), (hit, shoulder), (hit + 1, kick),
+                 (hit + 2, kick2), (hit + 4, shoulder), (n - 1, rest.lerp(shoulder, 0.15)), (n, rest)):
+        key_bone_matrix(c, rig, "bazooka", f, m)
+    for f, sc in ((0, 1.0), (hit - 1, 1.0), (hit, FLASH_GROW), (hit + 1, FLASH_GROW * 1.15), (hit + 2, FLASH_GROW * 0.55),
+                  (hit + 3, 1.0), (n, 1.0)):
+        c.key("flash", f, scale=(sc, sc, sc))
+    # stand up taller (legs drawn in under the body), brace, recoil back, settle
+    for f, fwd, up, pitch in ((0, 0, 0, 0), (4, 0.0, 0.060, 1.5), (hit - 1, 0.005, 0.070, 2.0), (hit, 0.005, 0.070, 2.5),
+                              (hit + 1, -0.040, 0.066, 4.5), (hit + 2, -0.036, 0.065, 3.8), (hit + 4, -0.015, 0.060, 2.0),
+                              (n, 0, 0, 0)):
+        c.key("body", f, loc=(0, fwd * s, up * s), rot=(pitch, 0, 0))
+    for f, ang in ((0, 0), (5, 3), (hit + 1, 7), (hit + 4, 2), (n, 0)):
+        c.key("head", f, rot=(ang, 0, 0))
+    for f, ang in ((0, 0), (hit + 1, -4), (n, 0)):
+        c.key("abdomen", f, rot=(ang, 0, 0))
+    for sgn, b in ((1, "antenna.L"), (-1, "antenna.R")):
+        c.key(b, 0, rot=(0, 0, 0)); c.key(b, 5, rot=(-12, 0, 6 * sgn)); c.key(b, hit + 1, rot=(-24, 0, 14 * sgn)); c.key(b, n, rot=(0, 0, 0))
+
+
 # ------------------------------------------------------------------------------------------------
 def build(variant: str):
     cfg = VARIANTS[variant]
@@ -451,17 +717,29 @@ def build(variant: str):
         # 6-7 px oval; portrait: a pillow-like grey block, no visible launcher)
         pack = body.cube("body", "M_Pack", V(0.0, 0.11, 0.50), size=sc3((0.30, 0.31, 0.22)))
         pack["sa_bevel"] = R(0.075)                                                            # pillow-like
+        # the grenade (sprite: a ~3 px dark-blue ball): at rest it sits hidden inside the pack; the
+        # attack clip pulls it out into the right foreleg's claw (bone "grenade", see key_attack_throw)
+        g = body.sphere("grenade", "M_Grenade", GRENADE_REST(V), R(GRENADE_R), scale=(1.0, 1.12, 0.94), segments=10, rings=7)
+        g["sa_no_subdiv"] = True
     elif cfg["weapon"] == "bazooka":
         # thin dark tube over the back: rear over the gaster's LEFT (+X), muzzle past the head's RIGHT
-        # (sprite UNANTBZ facing up: the tube runs from the lower-left to the upper-right)
-        rear, front = Vector(V(0.09, 0.34, 0.56)), Vector(V(-0.17, -0.60, 0.50))
+        # (sprite UNANTBZ facing up: the tube runs from the lower-left to the upper-right).  The tube
+        # is its own bone ("bazooka"): the attack clip shoulders it on the right side.
+        rear, front = (Vector(p) for p in BAZOOKA_REST(V))
         d = (front - rear).normalized()
-        tube(body, "body", "M_Accent", [tuple(rear), tuple(front - d * R(0.07))], [R(0.034), R(0.034)], sides=10)
-        tube(body, "body", "M_Black", [tuple(front - d * R(0.08)), tuple(front)], [R(0.052), R(0.046)], sides=10)   # muzzle
-        tube(body, "body", "M_Black", [tuple(rear - d * R(0.02)), tuple(rear + d * R(0.12))], [R(0.048), R(0.046)], sides=10)  # breech
-        for u, anchor in ((0.26, V(0, 0.05, 0.42)), (0.62, V(0, 0.28, 0.36))):               # mounting posts
+        tube(body, "bazooka", "M_Accent", [tuple(rear), tuple(front - d * R(0.07))], [R(0.034), R(0.034)], sides=10)
+        tube(body, "bazooka", "M_Black", [tuple(front - d * R(0.08)), tuple(front)], [R(0.052), R(0.046)], sides=10)   # muzzle
+        tube(body, "bazooka", "M_Black", [tuple(rear - d * R(0.02)), tuple(rear + d * R(0.12))], [R(0.048), R(0.046)], sides=10)  # breech
+        # two short mounting feet under the tube (rest on the back; grips when it is shouldered)
+        for u in (0.26, 0.62):
             top = rear.lerp(front, u)
-            tube(body, "body", "M_Accent", [anchor, tuple(top)], [R(0.022), R(0.02)], sides=6)
+            tube(body, "bazooka", "M_Accent", [tuple(top + Vector((0, 0, -R(0.095)))), tuple(top)], [R(0.022), R(0.02)], sides=6)
+        # back-blast flash at the breech: modelled at 1/FLASH_GROW size so it hides inside the breech
+        # cap; the attack clip scales bone "flash" up by FLASH_GROW for a few frames when it fires
+        h = FLASH_HEAD(rear, d, R)
+        k = 1.0 / FLASH_GROW
+        tube(body, "flash", "M_Flash", [tuple(h - d * R(t) * k) for t in (-0.005, 0.07, 0.17, 0.225)],
+             [R(0.036) * k, R(0.060) * k, R(0.046) * k, R(0.010) * k], sides=8)
 
     mesh = body.join()
 
@@ -478,9 +756,22 @@ def build(variant: str):
     ]
     for spec in specs:
         bones += leg_bones(spec, parent="body")
+    if cfg["weapon"] == "grenade":
+        gp = Vector(GRENADE_REST(V))
+        bones.append(BoneDef("grenade", tuple(gp), tuple(gp + Vector((0, 0, R(0.10)))), parent="body"))
+        hp = hand_point(next(sp for sp in specs if sp.name == "R1"), s)
+        bones.append(BoneDef("hand.R1", tuple(hp), tuple(hp + Vector((0, 0, R(0.06)))), parent="leg.R1.ik", deform=False))
+    elif cfg["weapon"] == "bazooka":
+        rear, front = (Vector(p) for p in BAZOOKA_REST(V))
+        d = (front - rear).normalized()
+        h = FLASH_HEAD(rear, d, R)
+        bones.append(BoneDef("bazooka", tuple(rear), tuple(front), parent="body"))
+        bones.append(BoneDef("flash", tuple(h), tuple(h - d * R(0.12)), parent="bazooka"))
     rig = salib.build_armature("Rig", bones)
     salib.skin(mesh, rig)
     apply_leg_ik(rig, specs)
+    # the held grenade follows the right foreleg's claw while the attack clip says so
+    hold = add_copy_location(rig, "grenade", "hand.R1", "GrenadeHold") if cfg["weapon"] == "grenade" else None
 
     # ---- animations ----------------------------------------------------------------------------
     clips = []
@@ -488,6 +779,8 @@ def build(variant: str):
     c = Clip(rig, "idle", 36)
     key_chain_rest(c, specs, 0)
     key_feet_rest(c, rig, specs, (0, 36))
+    if hold:
+        key_influence(hold, 0, 0.0)                 # grenade stays in the pack
     c.key("body", 0, loc=(0, 0, 0)); c.key("body", 18, loc=(0, 0, 0.010 * s)); c.key("body", 36, loc=(0, 0, 0))
     c.key("abdomen", 0, rot=(0, 0, 0)); c.key("abdomen", 18, rot=(3, 0, 0)); c.key("abdomen", 36, rot=(0, 0, 0))
     c.key("head", 0, rot=(0, 0, 0)); c.key("head", 14, rot=(2, 0, 4)); c.key("head", 26, rot=(-1, 0, -3)); c.key("head", 36, rot=(0, 0, 0))
@@ -503,6 +796,8 @@ def build(variant: str):
     stride = 1.25 * n / salib.FPS / cfg["game_scale"]
     c = Clip(rig, "move", n)
     key_chain_rest(c, specs, 0)
+    if hold:
+        key_influence(hold, 0, 0.0)
     key_walk(c, rig, specs, n, stride=stride, lift=MOVE_LIFT * s, body_bob=0.010 * s)
     for f, ang in ((0, 0), (n // 4, 2.5), (n // 2, 0), (3 * n // 4, -2.5), (n, 0)):
         c.key("head", f, rot=(0, 0, ang))
@@ -511,60 +806,25 @@ def build(variant: str):
         c.key("antenna.R", f, rot=(-ang * 2.0, 0, 0))
     clips.append(loop_from_zero(c.finish(), n))
 
-    # attack (frames 1..n; frame 1 = rest)
+    # attack (frames 0..n, see ATTACK_HIT_FRAME and the module docstring)
     n = cfg["attack_frames"]
     c = Clip(rig, "attack", n, loop=False)
-    key_chain_rest(c, specs, 1)
-    key_feet_rest(c, rig, specs, (1, n))
     if cfg["weapon"] is None:
-        # soldier bite (0.4 s): rear up with the front legs raised and the mandibles opening wide
-        # like ATTACK1, lunge and snap shut (ATTACK2), settle
-        for spec in specs:
-            if spec.name[1] == "1":
-                key_foot(c, rig, spec, 4, (0, -0.04 * s, 0.12 * s))
-                key_foot(c, rig, spec, 7, (0, 0, 0))
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("body", 4, loc=(0, -0.04 * s, 0.06 * s), rot=(14, 0, 0))
-        c.key("body", 7, loc=(0, 0.09 * s, 0.01 * s), rot=(-3, 0, 0))
-        c.key("body", 10, loc=(0, 0.02 * s, 0), rot=(1, 0, 0))
-        c.key("body", n, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 4, rot=(10, 0, 0)); c.key("head", 7, rot=(-8, 0, 0)); c.key("head", n, rot=(0, 0, 0))
-        for sgn, b in ((1, "mandible.L"), (-1, "mandible.R")):
-            c.key(b, 1, rot=(0, 0, 0))
-            c.key(b, 4, rot=(0, 0, 65 * sgn))
-            c.key(b, 7, rot=(0, 0, -6 * sgn))
-            c.key(b, 9, rot=(0, 0, 0))
-            c.key(b, n, rot=(0, 0, 0))
-        for sgn, b in ((1, "antenna.L"), (-1, "antenna.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 4, rot=(-25, 0, 15 * sgn)); c.key(b, n, rot=(0, 0, 0))
+        key_attack_bite(c, rig, specs, s, n)
     elif cfg["weapon"] == "grenade":
-        # grenadier (0.7 s): crouch, hop as the grenade leaves the pack, land
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("body", 5, loc=(0, 0, -0.04 * s), rot=(-4, 0, 0))
-        c.key("body", 9, loc=(0, -0.03 * s, 0.07 * s), rot=(8, 0, 0))
-        c.key("body", 14, loc=(0, 0, -0.01 * s), rot=(-2, 0, 0))
-        c.key("body", n, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("abdomen", 1, rot=(0, 0, 0)); c.key("abdomen", 9, rot=(-8, 0, 0)); c.key("abdomen", n, rot=(0, 0, 0))
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 9, rot=(-8, 0, 0)); c.key("head", n, rot=(0, 0, 0))
-        for sgn, b in ((1, "mandible.L"), (-1, "mandible.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 9, rot=(0, 0, 20 * sgn)); c.key(b, n, rot=(0, 0, 0))
+        key_attack_throw(c, rig, specs, s, n, hold)
     else:
-        # bazooka (0.6 s): brace, recoil backwards with the front pitching up, recover
-        c.key("body", 1, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("body", 3, loc=(0, 0.02 * s, -0.01 * s), rot=(-2, 0, 0))
-        c.key("body", 6, loc=(0, -0.08 * s, 0.03 * s), rot=(9, 0, 0))
-        c.key("body", 11, loc=(0, -0.02 * s, 0), rot=(2, 0, 0))
-        c.key("body", n, loc=(0, 0, 0), rot=(0, 0, 0))
-        c.key("head", 1, rot=(0, 0, 0)); c.key("head", 6, rot=(-10, 0, 0)); c.key("head", n, rot=(0, 0, 0))
-        for sgn, b in ((1, "antenna.L"), (-1, "antenna.R")):
-            c.key(b, 1, rot=(0, 0, 0)); c.key(b, 6, rot=(-20, 0, 10 * sgn)); c.key(b, n, rot=(0, 0, 0))
-    clips.append(c.finish())
+        key_attack_bazooka(c, rig, specs, s, n, V)
+    c.finish()
+    clips.append(from_zero(c.action, n))
 
     # death (1.2 s, frames 1..36): the legs give way and splay out flat on the ground while the
     # body drops onto it (DEATH sprite: flattened, legs splayed to both sides); mandibles fall
     # open, antennae droop, the gaster sags
     c = Clip(rig, "death", 36, loop=False)
     key_chain_rest(c, specs, 1)
+    if hold:
+        key_influence(hold, 1, 0.0)
     key_death_splay(c, rig, specs, 36, sink=0.115 * s, splay=0.24 * s, roll_deg=5.0)
     c.key("head", 1, rot=(0, 0, 0)); c.key("head", 36, rot=(-10, 0, 8))
     c.key("abdomen", 1, rot=(0, 0, 0)); c.key("abdomen", 36, rot=(8, 0, -6))
