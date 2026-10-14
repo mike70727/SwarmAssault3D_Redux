@@ -1,0 +1,334 @@
+// Unit and weapon definitions for all 21 roster entries.
+//
+// Numbers are converted from the OpenSA re-implementation (commit b61363d9, mods/sa/rules + weapons):
+//   speed  = OpenRA units/tick / 1024 * 25        -> cells per second
+//   reload = ticks / 25                            -> seconds
+//   range/spread/inaccuracy = OpenRA WDist / 1024  -> cells
+//   build_time = BuildDuration / 25                -> seconds
+// They are OpenSA's reconstruction, NOT verified original Swarm Assault statistics
+// (docs/GAMEPLAY_RESEARCH.md, assumption A1). Edit freely.
+(
+    weapons: {
+        // ---------------------------------------------------------------- ants
+        "ant_bite": (
+            name: "Bite", range: 1.5, reload: 0.32, damage: 300.0, spread: 0.0,
+            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
+            source: "opensa ants_light: Range 1c512, ReloadDelay 8, Damage 300, InvalidTargets Colony",
+        ),
+        "ant_grenade": (
+            name: "Grenade", range: 6.0, reload: 1.6, damage: 1470.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.79,
+            projectile: Bullet(speed: 6.35, arc: 0.35), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.4, effect: "explosion_medium", impact_sound: "explosion1",
+            source: "opensa ants_medium: Range 6c0, ReloadDelay 40, Damage 1470, Spread 256, Inaccuracy 813, Bullet speed 260",
+        ),
+        "ant_rocket": (
+            name: "Rocket", range: 9.0, reload: 2.2, damage: 1950.0, spread: 0.25, inaccuracy: 0.1,
+            projectile: Bullet(speed: 8.54, arc: 0.02), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.36, effect: "explosion_big", fire_sound: "rocket_launch", impact_sound: "explosion3",
+            source: "opensa ants_heavy: Range 9c0, ReloadDelay 55, Damage 1950, Spread 256, Bullet speed 350",
+        ),
+        // ------------------------------------------------------------- beetles
+        "beetle_mg": (
+            name: "Heavy machine gun", range: 6.0, reload: 0.24, damage: 782.0, spread: 0.12, inaccuracy: 0.29,
+            projectile: Instant, targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.05, effect: "hit_small", fire_sound: "minigun", impact_sound: "ricochet",
+            source: "opensa beetles_light: Range 6c0, ReloadDelay 6, Damage 782, Spread 125, Inaccuracy 0c300",
+        ),
+        "beetle_shrapnel": (
+            name: "Shrapnel", range: 3.0, reload: 1.0, damage: 850.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 4.88, volley: 10, volley_spread_deg: 360.0,
+            projectile: Bullet(speed: 4.8, arc: 0.45), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.2, effect: "explosion_shrapnel", fire_sound: "shrapnel_fire", impact_sound: "explosion1", friendly_fire: false,
+            source: "opensa beetles_medium: 10 armaments, Range 3c0, ReloadDelay 25, Damage 850, Spread 256, Inaccuracy 5000",
+        ),
+        "beetle_cannon": (
+            name: "Cannon", range: 14.0, min_range: 2.0, reload: 1.2, damage: 1950.0, spread: 0.29, inaccuracy: 1.46,
+            projectile: Bullet(speed: 13.7, arc: 0.12), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.2, effect: "explosion_big", fire_sound: "cannon", impact_sound: "explosion2",
+            source: "opensa beetles_heavy: Range 14c0, ReloadDelay 30, Damage 1950, Spread 300, Inaccuracy 1500, Bullet speed 562",
+        ),
+        // ------------------------------------------------------------- spiders
+        "spider_bite": (
+            name: "Bite", range: 1.5, reload: 0.32, damage: 550.0, spread: 0.0,
+            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
+            source: "opensa spiders_light: Range 1c512, ReloadDelay 8, Damage 550, InvalidTargets Colony",
+        ),
+        "spider_sniper": (
+            name: "Sniper rifle", range: 14.0, reload: 1.0, damage: 1450.0, spread: 0.12, inaccuracy: 0.25,
+            projectile: Instant, targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.1, effect: "hit_small", fire_sound: "sniper_fire",
+            source: "opensa spiders_medium: Range 14c0, ReloadDelay 25, Damage 1450, Spread 125, Inaccuracy 0c256",
+        ),
+        "spider_missile": (
+            name: "Cruise missile", range: 18.0, reload: 1.6, damage: 3000.0, spread: 0.25, inaccuracy: 0.1,
+            projectile: Missile(speed: 4.0, accel: 7.0, turn_rate: 240.0), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.08, effect: "explosion_big", fire_sound: "missile_launch", impact_sound: "explosion2",
+            source: "opensa spiders_heavy: Range 18c0, ReloadDelay 40, Damage 3000, Spread 256, Missile speed 350 accel 12",
+        ),
+        // ----------------------------------------------------------- scorpions
+        "scorpion_sting": (
+            name: "Sting", range: 1.5, reload: 0.32, damage: 715.0, spread: 0.0,
+            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            fire_delay: 0.15, effect: "bite", fire_sound: "savage_attack",
+            source: "opensa scorpions_light: Range 1c512, ReloadDelay 8, Damage 715, InvalidTargets Colony",
+        ),
+        "scorpion_spear": (
+            name: "Harpoon", range: 15.0, reload: 1.2, damage: 1470.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.49,
+            projectile: Bullet(speed: 10.99, arc: 0.03), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.16, effect: "hit_spear", fire_sound: "spear", impact_sound: "sniper_hit",
+            source: "opensa scorpions_medium: Range 15c0, ReloadDelay 30, Damage 1470, Spread 256, Bullet speed 450",
+        ),
+        "scorpion_star": (
+            name: "Ninja star", range: 12.0, reload: 0.72, damage: 2200.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.49,
+            projectile: Missile(speed: 9.77, accel: 0.0, turn_rate: 180.0), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.16, effect: "hit_star", fire_sound: "star_launch", impact_sound: "star_hit",
+            source: "opensa scorpions_heavy: Range 12c0, ReloadDelay 18, Damage 2200, Spread 256, Missile speed 400",
+        ),
+        // --------------------------------------------------------------- wasps
+        "wasp_mg": (
+            name: "Light machine gun", range: 10.0, reload: 0.2, damage: 782.0, spread: 0.12,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.59,
+            projectile: Bullet(speed: 13.7, arc: 0.0), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.05, effect: "hit_small", fire_sound: "machinegun", impact_sound: "ricochet",
+            source: "opensa wasps_light: Range 10c0, ReloadDelay 5, Damage 782, Spread 125, Inaccuracy 600, Bullet speed 562",
+        ),
+        "wasp_paralysis": (
+            name: "Paralysis arrow", range: 15.0, reload: 1.8, damage: 0.0, spread: 0.5, inaccuracy: 0.49,
+            projectile: Bullet(speed: 13.7, arc: 0.05), targets: (ground: true, air: false, colony: false),
+            paralyze: Some((duration: 8.0, radius: 2.0)),
+            fire_delay: 0.04, effect: "paralyze", fire_sound: "arrow", impact_sound: "paralysis",
+            source: "opensa wasps_medium: Range 15c0, ReloadDelay 45, Damage 0, paralyse 200 ticks in 2c0, InvalidTargets Colony/wasp/Plant",
+        ),
+        "wasp_sonic": (
+            name: "Sonic beam", range: 8.0, reload: 0.16, damage: 1000.0, spread: 0.25, inaccuracy: 0.1,
+            projectile: Bullet(speed: 4.88, arc: 0.0), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.04, effect: "hit_sonic", fire_sound: "sonic",
+            source: "opensa wasps_heavy: Range 8c0, ReloadDelay 4, Damage 1000, Spread 256, Bullet speed 200",
+        ),
+        // -------------------------------------------------------------- creeps
+        "bull_bite": (
+            name: "Bite", range: 1.0, reload: 0.32, damage: 200.0, spread: 0.0,
+            projectile: Instant, targets: (ground: true, air: false, colony: false),
+            fire_delay: 0.15, effect: "bite", fire_sound: "ant_crunch",
+            source: "opensa ant_bull_pirate: Range 1c0, ReloadDelay 8, Damage 200",
+        ),
+        "pirate_grenade": (
+            name: "Grenade", range: 6.0, reload: 1.6, damage: 1470.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.79,
+            projectile: Bullet(speed: 5.6, arc: 0.35), targets: (ground: true, air: true, colony: true),
+            fire_delay: 0.4, effect: "explosion_medium", impact_sound: "explosion1",
+            source: "opensa ants_grenadier_pirate: Range 6c0, ReloadDelay 40, Damage 1470, Bullet speed 230",
+        ),
+        "dragonfly_bomb": (
+            name: "Brake bomb", range: 5.0, reload: 0.9, damage: 8500.0, spread: 0.29,
+            projectile: Bomb(fall_speed: 2.5), targets: (ground: true, air: false, colony: true), friendly_fire: true,
+            fire_delay: 0.0, effect: "explosion_big", impact_sound: "brakebomb_explode",
+            source: "opensa dragonfly_left/right: GravityBomb, Damage 8500, Spread 300; wave 30 ticks on / 80 off (simplified to one bomb every 0.9 s)",
+        ),
+        "fly_bomb": (
+            name: "Bouncing bomb", range: 5.0, reload: 2.0, damage: 4200.0, spread: 0.29,
+            projectile: Bouncing(speed: 2.44, arc: 0.4, bounces: 2, bounce_factor: 0.75), targets: (ground: true, air: false, colony: true), friendly_fire: true,
+            fire_delay: 0.0, effect: "explosion_big", impact_sound: "bouncebomb_explode",
+            source: "opensa fly/fly1/fly2: bouncing bullet speed 100 splitting twice, Damage 4200, Spread 300, discharge every 50 ticks",
+        ),
+        "moth_puff": (
+            name: "Puff", range: 6.0, reload: 0.8, damage: 500.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 2.93,
+            projectile: Bullet(speed: 4.8, arc: 0.35), targets: (ground: true, air: false, colony: true), friendly_fire: true,
+            fire_delay: 0.0, effect: "explosion_shrapnel", impact_sound: "explosion1",
+            source: "opensa moth: Bullet speed 170-220, Damage 500, Spread 256, Inaccuracy 3000, discharge every 20 ticks (seed spawning not implemented)",
+        ),
+        "machine_gobstopper": (
+            name: "Gobstopper", range: 10.0, reload: 4.0, damage: 3000.0, spread: 0.29,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 2.93,
+            projectile: Bouncing(speed: 3.66, arc: 0.5, bounces: 2, bounce_factor: 0.6), targets: (ground: true, air: false, colony: true), friendly_fire: true,
+            fire_delay: 0.0, effect: "explosion_medium", impact_sound: "gobstopper_explode",
+            source: "opensa flying_machine: Bullet speed 150, BounceCount 2, Damage 3000, Spread 300, ReloadDelay 100",
+        ),
+        // ------------------------------------------------------------ level structures
+        "tesla_bolt": (
+            name: "Tesla bolt", range: 7.0, reload: 1.5, damage: 1400.0, spread: 0.3, inaccuracy: 0.0,
+            projectile: Instant, targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.1, effect: "hit_small", fire_sound: "turret_mg", impact_sound: "ricochet",
+            source: "ASSUMPTION: OpenSA tesla_coil_turret fires weapon 'electricity' (not in the reference copy); values chosen between the colony MG and cannon",
+        ),
+        "popcorn": (
+            name: "Popcorn", range: 6.0, reload: 1.6, damage: 253.0, spread: 0.5, inaccuracy: 0.4,
+            projectile: Bullet(speed: 6.0, arc: 0.3), targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "hit_small", fire_sound: "cannon", impact_sound: "ricochet",
+            source: "opensa popcorn plant weapon: ReloadDelay 40, Range 6c0, Damage 253, Spread 125, Missile speed 150",
+        ),
+        // ------------------------------------------------------------ colonies
+        "colony_ant_mg": (
+            name: "Colony machine gun", range: 12.0, reload: 0.24, damage: 690.0, spread: 0.12, inaccuracy: 0.5,
+            projectile: Instant, targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "hit_small", fire_sound: "turret_mg", impact_sound: "ricochet",
+            source: "opensa ants_colony weapon: Range 12c0, ReloadDelay 6, Damage 690, Spread 125, Inaccuracy 0c512",
+        ),
+        "colony_beetle_cannon": (
+            name: "Colony cannon", range: 12.0, min_range: 2.5, reload: 1.2, damage: 1950.0, spread: 0.29, inaccuracy: 0.98,
+            projectile: Bullet(speed: 13.7, arc: 0.12), targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "explosion_big", fire_sound: "cannon", impact_sound: "explosion2",
+            source: "opensa beetles_colony weapon: Range 12c0, ReloadDelay 30, Damage 1950, Spread 300, Inaccuracy 1000",
+        ),
+        "colony_spider_sniper": (
+            name: "Colony sniper", range: 13.0, reload: 1.0, damage: 1450.0, spread: 0.12, inaccuracy: 0.25,
+            projectile: Instant, targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "hit_small", fire_sound: "sniper_fire",
+            source: "opensa spiders_colony weapon: Range 13c0, ReloadDelay 25, Damage 1450, Spread 125",
+        ),
+        "colony_scorpion_spear": (
+            name: "Colony spear gun", range: 18.0, reload: 1.2, damage: 1470.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.98, volley: 2, volley_spread_deg: 0.0,
+            projectile: Bullet(speed: 10.99, arc: 0.03), targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "hit_spear", fire_sound: "spear", impact_sound: "sniper_hit",
+            source: "opensa scorpions_colony: two spear armaments, Range 18c0, ReloadDelay 30, Damage 1470, Spread 256",
+        ),
+        "colony_wasp_mg": (
+            name: "Colony machine gun", range: 12.0, reload: 0.16, damage: 782.0, spread: 0.25,
+            falloff: [100.0, 50.0, 25.0, 0.0], inaccuracy: 0.49,
+            projectile: Bullet(speed: 14.6, arc: 0.0), targets: (ground: true, air: true, colony: false),
+            fire_delay: 0.0, effect: "hit_small", fire_sound: "turret_mg", impact_sound: "ricochet",
+            source: "opensa wasps_colony weapon: Range 12c0, ReloadDelay 4, Damage 782, Spread 256, Bullet speed 600",
+        ),
+    },
+    units: {
+        // ---------------------------------------------------------------- ants
+        "ant_soldier": (
+            name: "Ant Soldier", family: Ant, role: Light, hp: 5300.0, speed: 2.56, turn_rate: 540.0, radius: 0.38,
+            scan_range: 6.0, build_time: 5.0, weapon: Some("ant_bite"), melee: true, aggressive: true,
+            model: "ant_soldier", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            source: "opensa ants_light: HP 5300, Speed 105, BuildDuration 125, ScanRadius 6, stance AttackAnything",
+        ),
+        "ant_grenadier": (
+            name: "Ant Grenadier", family: Ant, role: Medium, hp: 4400.0, speed: 2.25, turn_rate: 540.0, radius: 0.38,
+            scan_range: 6.0, build_time: 8.0, weapon: Some("ant_grenade"), aggressive: false,
+            model: "ant_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
+            source: "opensa ants_medium: HP 4400, Speed 92, BuildDuration 200, FireDelay 10",
+        ),
+        "ant_bazooka": (
+            name: "Ant Bazooka", family: Ant, role: Heavy, hp: 7350.0, speed: 1.9, turn_rate: 480.0, radius: 0.4,
+            scan_range: 10.0, build_time: 14.0, weapon: Some("ant_rocket"), aggressive: false,
+            model: "ant_bazooka", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            source: "opensa ants_heavy: HP 7350, Speed 78, BuildDuration 350, ScanRadius 10, FireDelay 9",
+        ),
+        // ------------------------------------------------------------- beetles
+        "beetle_ladybug": (
+            name: "Lady Bug", family: Beetle, role: Light, hp: 7600.0, speed: 2.25, turn_rate: 420.0, radius: 0.42,
+            scan_range: 6.0, build_time: 8.0, weapon: Some("beetle_mg"), aggressive: false,
+            model: "beetle_ladybug", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
+            source: "opensa beetles_light: HP 7600, Speed 92, BuildDuration 200",
+        ),
+        "beetle_shrapnel": (
+            name: "Shrapnel Beetle", family: Beetle, role: Medium, hp: 20200.0, speed: 2.12, turn_rate: 360.0, radius: 0.48,
+            scan_range: 6.0, build_time: 18.0, weapon: Some("beetle_shrapnel"), aggressive: false,
+            model: "beetle_shrapnel", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            source: "opensa beetles_medium: HP 20200, Speed 87, BuildDuration 450",
+        ),
+        "beetle_cannon": (
+            name: "Cannon Beetle", family: Beetle, role: Heavy, hp: 7600.0, speed: 1.29, turn_rate: 300.0, radius: 0.45,
+            scan_range: 13.0, build_time: 28.0, weapon: Some("beetle_cannon"), aggressive: false,
+            model: "beetle_cannon", model_scale: 1.0, attack_anim_time: 0.6, death_time: 1.2,
+            source: "opensa beetles_heavy: HP 7600, Speed 53, BuildDuration 700, ScanRadius 13",
+        ),
+        // ------------------------------------------------------------- spiders
+        "spider_black_widow": (
+            name: "Black Widow", family: Spider, role: Light, hp: 15400.0, speed: 3.59, turn_rate: 600.0, radius: 0.5,
+            scan_range: 6.0, build_time: 8.0, weapon: Some("spider_bite"), melee: true, aggressive: true,
+            model: "spider_black_widow", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            source: "opensa spiders_light: HP 15400, Speed 147, BuildDuration 200, stance AttackAnything",
+        ),
+        "spider_sniper": (
+            name: "Spider Sniper", family: Spider, role: Medium, hp: 6900.0, speed: 2.25, turn_rate: 480.0, radius: 0.5,
+            scan_range: 13.0, build_time: 18.0, weapon: Some("spider_sniper"), aggressive: false,
+            model: "spider_sniper", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            source: "opensa spiders_medium: HP 6900, Speed 92, BuildDuration 450, ScanRadius 13",
+        ),
+        "spider_missile": (
+            name: "Missile Spider", family: Spider, role: Heavy, hp: 13000.0, speed: 2.25, turn_rate: 420.0, radius: 0.55,
+            scan_range: 17.0, build_time: 22.0, weapon: Some("spider_missile"), aggressive: false,
+            model: "spider_missile", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            source: "opensa spiders_heavy: HP 13000, Speed 92, BuildDuration 550, ScanRadius 17",
+        ),
+        // ----------------------------------------------------------- scorpions
+        "scorpion_savage": (
+            name: "Savage Scorpion", family: Scorpion, role: Light, hp: 17528.0, speed: 2.39, turn_rate: 480.0, radius: 0.5,
+            scan_range: 6.0, build_time: 10.0, weapon: Some("scorpion_sting"), melee: true, aggressive: true,
+            model: "scorpion_savage", model_scale: 1.0, attack_anim_time: 0.45, death_time: 1.2,
+            source: "opensa scorpions_light: HP 17528, Speed 98, BuildDuration 250, stance AttackAnything",
+        ),
+        "scorpion_spear_gun": (
+            name: "Spear Gun Scorpion", family: Scorpion, role: Medium, hp: 8600.0, speed: 2.0, turn_rate: 420.0, radius: 0.5,
+            scan_range: 17.0, build_time: 20.0, weapon: Some("scorpion_spear"), aggressive: false,
+            model: "scorpion_spear_gun", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            source: "opensa scorpions_medium: HP 8600, Speed 82, BuildDuration 500, ScanRadius 17",
+        ),
+        "scorpion_ninja": (
+            name: "Ninja Scorpion", family: Scorpion, role: Heavy, hp: 12900.0, speed: 2.56, turn_rate: 480.0, radius: 0.5,
+            scan_range: 13.0, build_time: 30.0, weapon: Some("scorpion_star"), aggressive: false,
+            model: "scorpion_ninja", model_scale: 1.0, attack_anim_time: 0.5, death_time: 1.2,
+            source: "opensa scorpions_heavy: HP 12900, Speed 105, BuildDuration 750, ScanRadius 13",
+        ),
+        // --------------------------------------------------------------- wasps
+        "wasp_assault": (
+            name: "Assault Wasp", family: Wasp, role: Light, hp: 5300.0, speed: 4.81, turn_rate: 720.0, radius: 0.38,
+            scan_range: 8.0, build_time: 10.0, weapon: Some("wasp_mg"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            model: "wasp_assault", model_scale: 1.0, attack_anim_time: 0.3, death_time: 1.2,
+            source: "opensa wasps_light: HP 5300, Speed 197, BuildDuration 250, wasp locomotor ignores terrain",
+        ),
+        "wasp_paralysis": (
+            name: "Paralysis Wasp", family: Wasp, role: Medium, hp: 11000.0, speed: 3.27, turn_rate: 720.0, radius: 0.42,
+            scan_range: 15.0, build_time: 14.0, weapon: Some("wasp_paralysis"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            model: "wasp_paralysis", model_scale: 1.0, attack_anim_time: 0.4, death_time: 1.2,
+            source: "opensa wasps_medium (Parasite): HP 11000, Speed 134, BuildDuration 350, ScanRadius 15",
+        ),
+        "wasp_sonic": (
+            name: "Sonic Wasp", family: Wasp, role: Heavy, hp: 15400.0, speed: 3.78, turn_rate: 720.0, radius: 0.45,
+            scan_range: 8.0, build_time: 22.0, weapon: Some("wasp_sonic"), flying: true, air: false, altitude: 0.7, aggressive: false,
+            model: "wasp_sonic", model_scale: 1.0, attack_anim_time: 0.25, death_time: 1.2,
+            source: "opensa wasps_heavy: HP 15400, Speed 155, BuildDuration 550",
+        ),
+        // ------------------------------------------------------------- neutral
+        "neutral_dragonfly": (
+            name: "Dragonfly", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.6,
+            scan_range: 0.0, build_time: 0.0, weapon: Some("dragonfly_bomb"), flying: true, air: true, altitude: 1.6, controllable: false, aggressive: false,
+            model: "neutral_dragonfly", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
+            source: "opensa dragonfly: HP 25000, Aircraft Speed 105, drops brake bombs while crossing the map",
+        ),
+        "neutral_desert_fly": (
+            name: "Desert Fly", family: Neutral, role: Flyer, hp: 16000.0, speed: 5.37, turn_rate: 180.0, radius: 0.5,
+            scan_range: 0.0, build_time: 0.0, weapon: Some("fly_bomb"), flying: true, air: true, altitude: 1.5, controllable: false, aggressive: false,
+            model: "neutral_desert_fly", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
+            source: "opensa fly: HP 16000, Aircraft Speed 220, periodic bouncing bombs",
+        ),
+        "neutral_spawn_moth": (
+            name: "Spawn Moth", family: Neutral, role: Flyer, hp: 16000.0, speed: 5.37, turn_rate: 180.0, radius: 0.55,
+            scan_range: 0.0, build_time: 0.0, weapon: Some("moth_puff"), flying: true, air: true, altitude: 1.5, controllable: false, aggressive: false,
+            model: "neutral_spawn_moth", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
+            source: "opensa moth: HP 16000, Aircraft Speed 220, periodic puff discharges",
+        ),
+        "neutral_flying_machine": (
+            name: "Flying Machine", family: Neutral, role: Flyer, hp: 25000.0, speed: 2.56, turn_rate: 180.0, radius: 0.6,
+            scan_range: 0.0, build_time: 0.0, weapon: Some("machine_gobstopper"), flying: true, air: true, altitude: 1.2, controllable: false, aggressive: false,
+            model: "neutral_flying_machine", model_scale: 1.0, attack_anim_time: 0.0, death_time: 1.5,
+            source: "opensa flying_machine: HP 25000, Speed 105, CruiseAltitude 0c128, drops gobstoppers, pilot bails out (not implemented)",
+        ),
+        "neutral_bull_ant": (
+            name: "Bull Ant", family: Neutral, role: Creep, hp: 5300.0, speed: 2.56, turn_rate: 540.0, radius: 0.42,
+            scan_range: 8.0, build_time: 5.0, weapon: Some("bull_bite"), melee: true, aggressive: true,
+            model: "neutral_bull_ant", model_scale: 1.1, attack_anim_time: 0.4, death_time: 1.2,
+            source: "opensa ant_bull_pirate: HP 5300, Speed 105, ScanRadius 8, AttackAnything",
+        ),
+        "neutral_pirate_grenadier": (
+            name: "Pirate Grenadier", family: Neutral, role: Creep, hp: 4400.0, speed: 2.25, turn_rate: 540.0, radius: 0.4,
+            scan_range: 8.0, build_time: 8.0, weapon: Some("pirate_grenade"), aggressive: true,
+            model: "neutral_pirate_grenadier", model_scale: 1.0, attack_anim_time: 0.7, death_time: 1.2,
+            source: "opensa ants_grenadier_pirate: HP 4400, Speed 92, ScanRadius 8",
+        ),
+    },
+)

@@ -1,0 +1,19 @@
+[package]
+name = "swarm_assault_3d"
+description = "Playable 3D recreation of Swarm Assault (1999) built with Rust and Bevy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "swarm_assault_3d"
+path = "src/main.rs"
+
+[dependencies]
+sa_sim = { path = "../sa_sim" }
+bevy.workspace = true
+serde.workspace = true
+ron.workspace = true
+rand.workspace = true

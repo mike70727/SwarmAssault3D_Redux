@@ -1,0 +1,14 @@
+// Global simulation rules. Everything here is an assumption unless a `source` says otherwise.
+(
+    rules: (
+        tick_hz: 30.0,
+        unit_cap: 60,
+        idle_bit_search_radius: 10.0,   // OpenSA TakeColonyBitOnIdle Radius: 10
+        auto_target_interval: 0.25,
+        corpse_time: 8.0,
+        replan_interval: 0.6,
+        stuck_time: 0.8,
+        separation_strength: 6.0,
+        source: "tick/caps/timers are assumptions (docs/GAMEPLAY_RESEARCH.md A3, A9, A11); bit radius from OpenSA",
+    ),
+)

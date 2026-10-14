@@ -1,0 +1,13 @@
+/target
+/dist
+*.blend1
+*.blend2
+__pycache__/
+/blender/tmp/
+*.log
+_selftest*
+/target-win
+/dist
+/benchmarks
+/screenshots
+/saves

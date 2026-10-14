@@ -1,0 +1,13 @@
+﻿# build outputs and runtime files (the game writes these next to itself)
+/swarm_assault_3d.exe
+/log.txt
+/crash.log
+/saves/
+/screenshots/
+/benchmarks/
+/source/target/
+/source/target-win/
+/source/dist/
+__pycache__/
+*.blend1
+*.blend2

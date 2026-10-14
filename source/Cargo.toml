@@ -1,0 +1,30 @@
+[workspace]
+resolver = "3"
+members = ["crates/sa_sim", "crates/sa_game"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+bevy = { version = "=0.20.0", features = ["jpeg"] }
+glam = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+ron = "0.12"
+rand = "0.9"
+rand_chacha = { version = "0.9", features = ["serde"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true

@@ -1,0 +1,57 @@
+// Stage 2 battle map: two Ant colonies, Ant Soldiers only.
+//
+// PROVISIONAL RULE: `melee_can_damage_colonies: true` lets the Ant Soldiers (melee) damage colonies
+// so that this soldier-only battle can end with a capture. OpenSA/original rule is that melee units
+// cannot harm colonies (docs/GAMEPLAY_RESEARCH.md, verified item 3 / assumption A6). Every other map
+// leaves this false.
+(
+    name: "Ant Skirmish",
+    description: "Yellow (you) versus Red (bot). Capture the red colony: destroy it, then collect more of its bits than the enemy.",
+    width: 64,
+    height: 64,
+    tileset: "normal",
+    seed: 20261013,
+    terrain: [
+        (kind: Vegetation, center: (32.0, 32.0), radius: 5.0),
+        (kind: Rock, center: (20.0, 22.0), radius: 4.0),
+        (kind: Rock, center: (44.0, 42.0), radius: 4.0),
+        (kind: Vegetation, center: (10.0, 14.0), radius: 3.5),
+        (kind: Vegetation, center: (54.0, 50.0), radius: 3.5),
+    ],
+    obstacles: [
+        (kind: "rock_large", pos: (26.0, 36.0), radius: 1.4, yaw: 0.4, scale: 1.0),
+        (kind: "rock_large", pos: (38.0, 28.0), radius: 1.4, yaw: 2.1, scale: 1.1),
+        (kind: "rock_small", pos: (31.0, 44.0), radius: 0.8, yaw: 1.0, scale: 1.0),
+        (kind: "rock_small", pos: (33.0, 20.0), radius: 0.8, yaw: 0.2, scale: 0.9),
+        (kind: "rock_small", pos: (21.0, 21.0), radius: 0.7, yaw: 2.8, scale: 1.0),
+        (kind: "rock_small", pos: (44.0, 43.0), radius: 0.7, yaw: 1.7, scale: 1.0),
+        (kind: "rock_large", pos: (8.0, 30.0), radius: 1.3, yaw: 0.9, scale: 0.9),
+        (kind: "rock_large", pos: (56.0, 34.0), radius: 1.3, yaw: 2.4, scale: 0.9),
+        (kind: "mushroom", pos: (30.0, 30.0), radius: 0.6, yaw: 0.0, scale: 1.0),
+        (kind: "mushroom", pos: (34.0, 34.0), radius: 0.6, yaw: 1.2, scale: 1.1),
+        (kind: "flower", pos: (12.0, 12.0), radius: 0.5, yaw: 0.0, scale: 1.0),
+        (kind: "flower", pos: (52.0, 52.0), radius: 0.5, yaw: 0.0, scale: 1.0),
+        (kind: "grass_tuft", pos: (18.0, 40.0), radius: 0.3, yaw: 0.0, scale: 1.0, blocking: false),
+        (kind: "grass_tuft", pos: (46.0, 24.0), radius: 0.3, yaw: 1.0, scale: 1.0, blocking: false),
+        (kind: "grass_tuft", pos: (24.0, 10.0), radius: 0.3, yaw: 2.0, scale: 1.0, blocking: false),
+        (kind: "grass_tuft", pos: (40.0, 54.0), radius: 0.3, yaw: 0.5, scale: 1.0, blocking: false),
+        (kind: "grass_tuft", pos: (32.0, 8.0), radius: 0.3, yaw: 0.5, scale: 1.0, blocking: false),
+        (kind: "grass_tuft", pos: (32.0, 56.0), radius: 0.3, yaw: 0.5, scale: 1.0, blocking: false),
+    ],
+    colonies: [
+        (colony: "colony_ant", team: 1, pos: (14.0, 48.0), produce: Some("ant_soldier")),
+        (colony: "colony_ant", team: 2, pos: (50.0, 16.0), produce: Some("ant_soldier")),
+    ],
+    units: [
+        (unit: "ant_soldier", team: 1, pos: (14.0, 56.0), count: 8, spread: 2.5),
+        (unit: "ant_soldier", team: 2, pos: (50.0, 8.0), count: 8, spread: 2.5),
+    ],
+    teams: [
+        (id: 1, name: "Yellow", color: "Y", controller: Human, bot_profile: ""),
+        (id: 2, name: "Red", color: "R", controller: Bot, bot_profile: "medium"),
+    ],
+    rules: (
+        melee_can_damage_colonies: true,
+        unit_cap: Some(40),
+    ),
+)

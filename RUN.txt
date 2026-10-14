@@ -1,0 +1,9 @@
+Swarm Assault 3D - Windows x64 build (cross-compiled with mingw-w64, untested on Windows hardware)
+
+Double-click swarm_assault_3d.exe (keep the assets folder next to it).
+Command line options: swarm_assault_3d.exe --help
+Settings: assets\data\settings.ron   Controls: assets\data\controls.ron
+Docs: docs\  (BUILD_WINDOWS.md has a manual test checklist)
+Sources (complete package only): source\ holds the Rust workspace (crates\, Cargo.toml, tools\;
+  build with cargo build --release -p swarm_assault_3d from source\ with this assets\ folder copied or
+  linked next to it) and source\blender\ (bpy scripts, .blend files with packed textures, previews).
