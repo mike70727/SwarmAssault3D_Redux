@@ -112,8 +112,10 @@ interface and sound set. The screenshots on this page were taken with the origin
 
 ## Playing
 
-Windows 10 or 11 (64-bit) with a graphics card that runs Vulkan or DirectX 12. Start
-`swarm_assault_3d.exe` with the `assets` folder next to it.
+Windows 10 or 11 (64-bit) with a graphics card that runs Vulkan or DirectX 12. Download the latest
+build from [Releases](https://github.com/mike70727/SwarmAssault3D_Redux/releases), unzip it anywhere
+and start `swarm_assault_3d.exe` (keep the `assets` folder next to it). Windows may warn about an
+unknown publisher the first time, as the game is not code-signed: "More info", then "Run anyway".
 
 To use the original's look and sound, put your copy of *Swarm Assault* in a folder named
 `original_game\Swarm Assault` inside the game folder or in the folder above it, or set
