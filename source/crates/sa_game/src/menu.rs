@@ -74,7 +74,9 @@ struct MenuRoot;
 #[derive(Resource, Default)]
 pub struct MenuPage(pub usize);
 
-const PAGE_SIZE: usize = 24;
+/// Levels a page (two columns): 20 keep the whole menu, download offer and hint inside the default
+/// 1280x720 window.
+const PAGE_SIZE: usize = 20;
 
 #[derive(Component)]
 pub struct PauseOverlay;
